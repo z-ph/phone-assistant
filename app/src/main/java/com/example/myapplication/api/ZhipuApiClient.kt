@@ -2,6 +2,7 @@ package com.example.myapplication.api
 
 import android.content.Context
 import com.example.myapplication.api.model.*
+import com.example.myapplication.config.AppConfig.Timeouts as TimeoutConfig
 import com.example.myapplication.data.local.entities.ApiConfigEntity
 import com.example.myapplication.utils.ApiProvider
 import com.example.myapplication.utils.ApiProviders
@@ -30,10 +31,6 @@ class ZhipuApiClient(context: Context) {
 
     companion object {
         private const val TAG = "ZhipuApiClient"
-        // Default timeout values
-        private const val CONNECT_TIMEOUT = 30L
-        private const val READ_TIMEOUT = 60L
-        private const val WRITE_TIMEOUT = 60L
     }
 
     private val logger = Logger(TAG)
@@ -133,9 +130,9 @@ class ZhipuApiClient(context: Context) {
         }
 
         val client = OkHttpClient.Builder()
-            .connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
-            .readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
-            .writeTimeout(WRITE_TIMEOUT, TimeUnit.SECONDS)
+            .connectTimeout(TimeoutConfig.CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(TimeoutConfig.READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(TimeoutConfig.WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .addInterceptor(loggingInterceptor)
             .addInterceptor(createAuthInterceptor())
             .addInterceptor(createErrorHandlerInterceptor())
@@ -440,8 +437,8 @@ class ZhipuApiClient(context: Context) {
                 .build()
 
             val client = OkHttpClient.Builder()
-                .connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
-                .readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
+                .connectTimeout(TimeoutConfig.CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .readTimeout(TimeoutConfig.READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .build()
 
             val response = client.newCall(request).execute()

@@ -4,6 +4,8 @@ import android.content.Context
 import com.example.myapplication.accessibility.AutoService
 import com.example.myapplication.api.ZhipuApiClient
 import com.example.myapplication.api.model.UiAction
+import com.example.myapplication.config.AppConfig.Retry as RetryConfig
+import com.example.myapplication.config.AppConfig.Timeouts as TimeoutConfig
 import com.example.myapplication.screen.Base64Encoder
 import com.example.myapplication.screen.ImageCompressor
 import com.example.myapplication.screen.ScreenCapture
@@ -27,15 +29,6 @@ class TaskEngine(context: Context) {
 
     companion object {
         private const val TAG = "TaskEngine"
-
-        // Timeout settings
-        private const val SCREEN_CAPTURE_TIMEOUT_MS = 5000L
-        private const val API_REQUEST_TIMEOUT_MS = 30000L
-        private const val TASK_TIMEOUT_MS = 60000L
-
-        // Retry settings
-        private const val MAX_RETRIES = 3
-        private const val RETRY_DELAY_MS = 1000L
 
         // Default prompts
         private const val DEFAULT_PROMPT = "分析这个屏幕，告诉我应该点击哪里、滑动哪里或者输入什么来完成用户的任务。"
@@ -69,6 +62,13 @@ class TaskEngine(context: Context) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    /**
+     * Clear error state
+     */
+    fun clearError() {
+        _error.value = null
+    }
+
     // Current task job
     private var currentTaskJob: Job? = null
 
@@ -101,7 +101,7 @@ class TaskEngine(context: Context) {
 
         currentTaskJob = scope.launch {
             try {
-                withTimeout(TASK_TIMEOUT_MS) {
+                withTimeout(TimeoutConfig.TASK_TIMEOUT_MS) {
                     executeTaskInternal(prompt, maxSteps, onStep)
                 }
             } catch (e: Exception) {
@@ -268,9 +268,9 @@ class TaskEngine(context: Context) {
     }
 
     private suspend fun captureScreenWithRetry(): android.graphics.Bitmap? {
-        repeat(MAX_RETRIES) { attempt ->
+        repeat(RetryConfig.MAX_RETRIES) { attempt ->
             try {
-                val bitmap = withTimeout(SCREEN_CAPTURE_TIMEOUT_MS) {
+                val bitmap = withTimeout(TimeoutConfig.SCREEN_CAPTURE_TIMEOUT_MS) {
                     screenCapture.capture()
                 }
 
@@ -281,8 +281,8 @@ class TaskEngine(context: Context) {
                 logger.w("Screen capture attempt ${attempt + 1} failed: ${e.message}")
             }
 
-            if (attempt < MAX_RETRIES - 1) {
-                delay(RETRY_DELAY_MS.toLong())
+            if (attempt < RetryConfig.MAX_RETRIES - 1) {
+                delay(RetryConfig.RETRY_DELAY_MS)
             }
         }
 

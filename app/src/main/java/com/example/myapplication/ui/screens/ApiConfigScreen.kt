@@ -435,20 +435,22 @@ fun ApiConfigEditDialog(
 
                 Column(modifier = Modifier.selectableGroup()) {
                     ApiProviders.ALL.forEach { provider ->
+                        val onProviderSelected = {
+                            selectedProvider = provider
+                            if (baseUrl.isEmpty() || ApiProviders.ALL.any { it.defaultBaseUrl == baseUrl }) {
+                                baseUrl = provider.defaultBaseUrl
+                            }
+                            if (modelId.isEmpty() || ApiProviders.ALL.any { it.defaultModel == modelId }) {
+                                modelId = provider.defaultModel
+                            }
+                        }
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .selectable(
                                     selected = selectedProvider.id == provider.id,
-                                    onClick = {
-                                        selectedProvider = provider
-                                        if (baseUrl.isEmpty() || ApiProviders.ALL.any { it.defaultBaseUrl == baseUrl }) {
-                                            baseUrl = provider.defaultBaseUrl
-                                        }
-                                        if (modelId.isEmpty() || ApiProviders.ALL.any { it.defaultModel == modelId }) {
-                                            modelId = provider.defaultModel
-                                        }
-                                    },
+                                    onClick = onProviderSelected,
                                     role = Role.RadioButton
                                 )
                                 .padding(vertical = 4.dp),
@@ -456,7 +458,7 @@ fun ApiConfigEditDialog(
                         ) {
                             RadioButton(
                                 selected = selectedProvider.id == provider.id,
-                                onClick = null
+                                onClick = onProviderSelected
                             )
                             Spacer(Modifier.width(8.dp))
                             Column {

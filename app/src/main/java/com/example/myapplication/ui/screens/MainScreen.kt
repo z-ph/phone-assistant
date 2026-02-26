@@ -147,7 +147,7 @@ fun MainScreen(
                 item {
                     ErrorCard(
                         message = errorMessage,
-                        onDismiss = { /* Clear error in engine */ }
+                        onDismiss = { taskEngine.clearError() }
                     )
                 }
             }

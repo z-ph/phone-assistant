@@ -7,6 +7,8 @@ import com.example.myapplication.accessibility.AutoService
 import com.example.myapplication.agent.models.ToolCallInfo
 import com.example.myapplication.agent.models.ToolResult
 import com.example.myapplication.api.model.SwipeDirection
+import com.example.myapplication.config.AppConfig.ActionDelays as Delays
+import com.example.myapplication.config.AppConfig.Coordinates as Coords
 import com.example.myapplication.screen.Base64Encoder
 import com.example.myapplication.screen.ImageCompressor
 import com.example.myapplication.screen.ScreenCapture
@@ -274,8 +276,8 @@ class ToolRegistry private constructor(private val context: Context) {
         description = "点击屏幕指定坐标位置",
         category = ToolCategory.GESTURE,
         parameters = listOf(
-            ToolParam("x", "integer", "X坐标 (0-1080)"),
-            ToolParam("y", "integer", "Y坐标 (0-2400)")
+            ToolParam("x", "integer", "X坐标 (0-${Coords.NORMALIZED_WIDTH})"),
+            ToolParam("y", "integer", "Y坐标 (0-${Coords.NORMALIZED_HEIGHT})")
         ),
         execute = { params, ctx ->
             val service = AutoService.getInstance()
@@ -283,8 +285,8 @@ class ToolRegistry private constructor(private val context: Context) {
 
             val x = (params["x"] as? Number)?.toFloat() ?: 0f
             val y = (params["y"] as? Number)?.toFloat() ?: 0f
-            val realX = x * ctx.screenWidth / 1080f
-            val realY = y * ctx.screenHeight / 2400f
+            val realX = x * ctx.screenWidth / Coords.NORMALIZED_WIDTH.toFloat()
+            val realY = y * ctx.screenHeight / Coords.NORMALIZED_HEIGHT.toFloat()
 
             service.click(realX, realY)
             ToolResult.success("点击成功 (${realX.toInt()}, ${realY.toInt()})")
@@ -296,8 +298,8 @@ class ToolRegistry private constructor(private val context: Context) {
         description = "长按屏幕指定坐标",
         category = ToolCategory.GESTURE,
         parameters = listOf(
-            ToolParam("x", "integer", "X坐标 (0-1080)"),
-            ToolParam("y", "integer", "Y坐标 (0-2400)"),
+            ToolParam("x", "integer", "X坐标 (0-${Coords.NORMALIZED_WIDTH})"),
+            ToolParam("y", "integer", "Y坐标 (0-${Coords.NORMALIZED_HEIGHT})"),
             ToolParam("duration", "integer", "长按时长(毫秒)，默认500", required = false)
         ),
         execute = { params, ctx ->
@@ -306,9 +308,9 @@ class ToolRegistry private constructor(private val context: Context) {
 
             val x = (params["x"] as? Number)?.toFloat() ?: 0f
             val y = (params["y"] as? Number)?.toFloat() ?: 0f
-            val duration = (params["duration"] as? Number)?.toLong() ?: 500L
-            val realX = x * ctx.screenWidth / 1080f
-            val realY = y * ctx.screenHeight / 2400f
+            val duration = (params["duration"] as? Number)?.toLong() ?: Delays.LONG_DELAY_MS
+            val realX = x * ctx.screenWidth / Coords.NORMALIZED_WIDTH.toFloat()
+            val realY = y * ctx.screenHeight / Coords.NORMALIZED_HEIGHT.toFloat()
 
             service.longClick(realX, realY, duration)
             ToolResult.success("长按成功 (${realX.toInt()}, ${realY.toInt()})")
@@ -320,8 +322,8 @@ class ToolRegistry private constructor(private val context: Context) {
         description = "双击屏幕指定坐标",
         category = ToolCategory.GESTURE,
         parameters = listOf(
-            ToolParam("x", "integer", "X坐标 (0-1080)"),
-            ToolParam("y", "integer", "Y坐标 (0-2400)")
+            ToolParam("x", "integer", "X坐标 (0-${Coords.NORMALIZED_WIDTH})"),
+            ToolParam("y", "integer", "Y坐标 (0-${Coords.NORMALIZED_HEIGHT})")
         ),
         execute = { params, ctx ->
             val service = AutoService.getInstance()
@@ -329,8 +331,8 @@ class ToolRegistry private constructor(private val context: Context) {
 
             val x = (params["x"] as? Number)?.toFloat() ?: 0f
             val y = (params["y"] as? Number)?.toFloat() ?: 0f
-            val realX = x * ctx.screenWidth / 1080f
-            val realY = y * ctx.screenHeight / 2400f
+            val realX = x * ctx.screenWidth / Coords.NORMALIZED_WIDTH.toFloat()
+            val realY = y * ctx.screenHeight / Coords.NORMALIZED_HEIGHT.toFloat()
 
             service.doubleClick(realX, realY)
             ToolResult.success("双击成功 (${realX.toInt()}, ${realY.toInt()})")
@@ -359,9 +361,9 @@ class ToolRegistry private constructor(private val context: Context) {
                 "right" -> SwipeDirection.RIGHT
                 else -> SwipeDirection.UP
             }
-            val scaledDistance = (distance * ctx.screenHeight / 2400f).toInt()
+            val scaledDistance = (distance * ctx.screenHeight / Coords.NORMALIZED_HEIGHT.toFloat()).toInt()
 
-            service.swipe(swipeDir, scaledDistance, 300)
+            service.swipe(swipeDir, scaledDistance, Delays.DEFAULT_GESTURE_DURATION_MS)
             ToolResult.success("滑动成功 $direction")
         }
     )
@@ -385,10 +387,10 @@ class ToolRegistry private constructor(private val context: Context) {
             val endX = (params["end_x"] as? Number)?.toFloat() ?: 0f
             val endY = (params["end_y"] as? Number)?.toFloat() ?: 0f
 
-            val realStartX = startX * ctx.screenWidth / 1080f
-            val realStartY = startY * ctx.screenHeight / 2400f
-            val realEndX = endX * ctx.screenWidth / 1080f
-            val realEndY = endY * ctx.screenHeight / 2400f
+            val realStartX = startX * ctx.screenWidth / Coords.NORMALIZED_WIDTH.toFloat()
+            val realStartY = startY * ctx.screenHeight / Coords.NORMALIZED_HEIGHT.toFloat()
+            val realEndX = endX * ctx.screenWidth / Coords.NORMALIZED_WIDTH.toFloat()
+            val realEndY = endY * ctx.screenHeight / Coords.NORMALIZED_HEIGHT.toFloat()
 
             service.drag(realStartX, realStartY, realEndX, realEndY)
             ToolResult.success("拖拽成功 (${realStartX.toInt()},${realStartY.toInt()} -> ${realEndX.toInt()},${realEndY.toInt()})")

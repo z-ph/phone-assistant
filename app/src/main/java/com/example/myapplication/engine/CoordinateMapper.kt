@@ -1,5 +1,6 @@
 package com.example.myapplication.engine
 
+import com.example.myapplication.config.AppConfig.Coordinates as Coords
 import com.example.myapplication.utils.Logger
 
 /**
@@ -10,9 +11,9 @@ object CoordinateMapper {
 
     private const val TAG = "CoordinateMapper"
 
-    // Target compression dimensions (must match ImageCompressor)
-    const val COMPRESSED_WIDTH = 768
-    const val COMPRESSED_HEIGHT = 1366
+    // Target compression dimensions (from AppConfig)
+    val COMPRESSED_WIDTH: Int get() = Coords.COMPRESSED_WIDTH
+    val COMPRESSED_HEIGHT: Int get() = Coords.COMPRESSED_HEIGHT
 
     private val logger = Logger(TAG)
 
@@ -31,10 +32,10 @@ object CoordinateMapper {
         realWidth: Int,
         realHeight: Int
     ): Pair<Float, Float> {
-        val realX = x * realWidth / COMPRESSED_WIDTH
-        val realY = y * realHeight / COMPRESSED_HEIGHT
+        val realX = x * realWidth / Coords.COMPRESSED_WIDTH
+        val realY = y * realHeight / Coords.COMPRESSED_HEIGHT
 
-        logger.d("Mapped ($x, $y) from ${COMPRESSED_WIDTH}x${COMPRESSED_HEIGHT} to ($realX, $realY) on ${realWidth}x${realHeight}")
+        logger.d("Mapped ($x, $y) from ${Coords.COMPRESSED_WIDTH}x${Coords.COMPRESSED_HEIGHT} to ($realX, $realY) on ${realWidth}x${realHeight}")
 
         return realX to realY
     }
@@ -54,10 +55,10 @@ object CoordinateMapper {
         realWidth: Int,
         realHeight: Int
     ): Pair<Float, Float> {
-        val compressedX = x * COMPRESSED_WIDTH / realWidth
-        val compressedY = y * COMPRESSED_HEIGHT / realHeight
+        val compressedX = x * Coords.COMPRESSED_WIDTH / realWidth
+        val compressedY = y * Coords.COMPRESSED_HEIGHT / realHeight
 
-        logger.d("Mapped ($x, $y) from ${realWidth}x${realHeight} to ($compressedX, $compressedY) on ${COMPRESSED_WIDTH}x${COMPRESSED_HEIGHT}")
+        logger.d("Mapped ($x, $y) from ${realWidth}x${realHeight} to ($compressedX, $compressedY) on ${Coords.COMPRESSED_WIDTH}x${Coords.COMPRESSED_HEIGHT}")
 
         return compressedX to compressedY
     }
@@ -118,8 +119,8 @@ object CoordinateMapper {
      * @return Pair of (scaleX, scaleY) factors
      */
     fun getScaleFactors(realWidth: Int, realHeight: Int): Pair<Float, Float> {
-        val scaleX = realWidth.toFloat() / COMPRESSED_WIDTH
-        val scaleY = realHeight.toFloat() / COMPRESSED_HEIGHT
+        val scaleX = realWidth.toFloat() / Coords.COMPRESSED_WIDTH
+        val scaleY = realHeight.toFloat() / Coords.COMPRESSED_HEIGHT
 
         logger.d("Scale factors: x=$scaleX, y=$scaleY")
 
@@ -134,7 +135,7 @@ object CoordinateMapper {
      * @return true if coordinates are valid
      */
     fun isValidCompressedCoordinate(x: Float, y: Float): Boolean {
-        return x in 0f..COMPRESSED_WIDTH.toFloat() && y in 0f..COMPRESSED_HEIGHT.toFloat()
+        return x in 0f..Coords.COMPRESSED_WIDTH.toFloat() && y in 0f..Coords.COMPRESSED_HEIGHT.toFloat()
     }
 
     /**
@@ -145,8 +146,8 @@ object CoordinateMapper {
      * @return Clamped (x, y) pair
      */
     fun clampToCompressedBounds(x: Float, y: Float): Pair<Float, Float> {
-        val clampedX = x.coerceIn(0f, COMPRESSED_WIDTH.toFloat())
-        val clampedY = y.coerceIn(0f, COMPRESSED_HEIGHT.toFloat())
+        val clampedX = x.coerceIn(0f, Coords.COMPRESSED_WIDTH.toFloat())
+        val clampedY = y.coerceIn(0f, Coords.COMPRESSED_HEIGHT.toFloat())
 
         if (clampedX != x || clampedY != y) {
             logger.w("Clamped coordinates ($x, $y) to ($clampedX, $clampedY)")
@@ -176,8 +177,8 @@ object CoordinateMapper {
         xPercent: Float, // 0.0 to 1.0
         yPercent: Float  // 0.0 to 1.0
     ): Pair<Float, Float> {
-        val x = xPercent * COMPRESSED_WIDTH
-        val y = yPercent * COMPRESSED_HEIGHT
+        val x = xPercent * Coords.COMPRESSED_WIDTH
+        val y = yPercent * Coords.COMPRESSED_HEIGHT
         return x to y
     }
 

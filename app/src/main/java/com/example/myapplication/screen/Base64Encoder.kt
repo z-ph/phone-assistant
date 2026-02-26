@@ -2,6 +2,7 @@ package com.example.myapplication.screen
 
 import android.graphics.Bitmap
 import android.util.Base64
+import com.example.myapplication.config.AppConfig.Image as ImgConfig
 import com.example.myapplication.utils.Logger
 import java.io.ByteArrayOutputStream
 
@@ -14,12 +15,12 @@ class Base64Encoder {
     companion object {
         private const val TAG = "Base64Encoder"
 
-        // Default compression settings
-        private const val DEFAULT_JPEG_QUALITY = 85
+        // Default compression settings (from AppConfig)
+        val DEFAULT_JPEG_QUALITY: Int get() = ImgConfig.DEFAULT_JPEG_QUALITY
         private const val DEFAULT_PNG_QUALITY = 100
 
-        // Maximum image size in bytes before encoding
-        private const val MAX_IMAGE_BYTES = 1024 * 1024 // 1MB
+        // Maximum image size in bytes before encoding (from AppConfig)
+        val MAX_IMAGE_BYTES: Int get() = ImgConfig.MAX_IMAGE_BYTES
     }
 
     private val logger = Logger(TAG)

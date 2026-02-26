@@ -1,6 +1,7 @@
 package com.example.myapplication.agent
 
 import android.content.Context
+import com.example.myapplication.config.AppConfig.Coordinates as Coords
 import com.example.myapplication.utils.Logger
 import org.json.JSONObject
 import java.util.regex.Pattern
@@ -53,8 +54,8 @@ class ToolManager(private val context: Context) {
                 name = "click",
                 description = "点击屏幕指定坐标位置",
                 parameters = listOf(
-                    ToolParameter("x", "int", "X坐标 (0-1080)", true),
-                    ToolParameter("y", "int", "Y坐标 (0-2400)", true)
+                    ToolParameter("x", "int", "X坐标 (0-${Coords.NORMALIZED_WIDTH})", true),
+                    ToolParameter("y", "int", "Y坐标 (0-${Coords.NORMALIZED_HEIGHT})", true)
                 ),
                 example = "click(540, 1200)"
             ),
@@ -62,8 +63,8 @@ class ToolManager(private val context: Context) {
                 name = "long_click",
                 description = "长按屏幕指定坐标",
                 parameters = listOf(
-                    ToolParameter("x", "int", "X坐标 (0-1080)", true),
-                    ToolParameter("y", "int", "Y坐标 (0-2400)", true),
+                    ToolParameter("x", "int", "X坐标 (0-${Coords.NORMALIZED_WIDTH})", true),
+                    ToolParameter("y", "int", "Y坐标 (0-${Coords.NORMALIZED_HEIGHT})", true),
                     ToolParameter("duration", "int", "长按时长(毫秒)，默认500", false)
                 ),
                 example = "long_click(540, 1200)"
@@ -72,8 +73,8 @@ class ToolManager(private val context: Context) {
                 name = "double_click",
                 description = "双击屏幕指定坐标",
                 parameters = listOf(
-                    ToolParameter("x", "int", "X坐标 (0-1080)", true),
-                    ToolParameter("y", "int", "Y坐标 (0-2400)", true)
+                    ToolParameter("x", "int", "X坐标 (0-${Coords.NORMALIZED_WIDTH})", true),
+                    ToolParameter("y", "int", "Y坐标 (0-${Coords.NORMALIZED_HEIGHT})", true)
                 ),
                 example = "double_click(540, 1200)"
             ),
@@ -232,6 +233,7 @@ class ToolManager(private val context: Context) {
 
     private val logger = Logger(TAG)
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val systemPromptBuilder = SystemPromptBuilder()
 
     // Tool call patterns - supports multiple formats
     private val toolBlockPattern = Pattern.compile(
@@ -266,17 +268,7 @@ class ToolManager(private val context: Context) {
      * Get default system prompt with tool definitions
      */
     fun getDefaultSystemPrompt(): String {
-        return """你是运行在Android手机上的智能助手。
-
-常用应用包名：
-微信=com.tencent.mm, 飞书=com.ss.android.lark, 抖音=com.ss.android.ugc.aweme, 淘宝=com.taobao.taobao, QQ=com.tencent.mobileqq, 钉钉=com.alibaba.android.rimet, 支付宝=com.eg.android.AlipayGphone, 微博=com.sina.weibo, 美团=com.sankuai.meituan, 知乎=com.zhihu.android, B站=tv.danmaku.bili
-
-规则：
-1. 打开应用：调用open_app，用对应包名
-2. 与用户对话：调用reply发送消息
-3. 需要看屏幕：调用capture_screen
-4. 任务完成：调用finish结束
-5. 每次只调用一个工具""".trimIndent()
+        return systemPromptBuilder.buildPrompt()
     }
 
     /**

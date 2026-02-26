@@ -1,6 +1,7 @@
 package com.example.myapplication.agent
 
 import com.example.myapplication.agent.models.ToolCallInfo
+import com.example.myapplication.config.AppConfig.Context as ContextConfig
 import com.example.myapplication.utils.Logger
 import com.google.gson.Gson
 
@@ -28,15 +29,6 @@ class ContextManager {
 
     companion object {
         private const val TAG = "ContextManager"
-
-        // Maximum messages to keep in context
-        const val MAX_MESSAGES = 30
-
-        // Maximum image messages (images consume more tokens)
-        const val MAX_IMAGE_MESSAGES = 5
-
-        // Threshold to trigger summarization
-        const val SUMMARY_THRESHOLD = 20
     }
 
     private val logger = Logger(TAG)
@@ -153,18 +145,18 @@ class ContextManager {
      * Prune history to fit within limits
      */
     private fun pruneHistory(): List<ExecutionRecord> {
-        if (messages.size <= MAX_MESSAGES) {
+        if (messages.size <= ContextConfig.MAX_MESSAGES) {
             return messages.toList()
         }
 
         // Keep recent messages, prefer removing old image messages
-        val recent = messages.takeLast(MAX_MESSAGES)
+        val recent = messages.takeLast(ContextConfig.MAX_MESSAGES)
 
         // If still too many images, remove oldest images
         var imgCount = recent.count { it.hasImage }
-        if (imgCount > MAX_IMAGE_MESSAGES) {
+        if (imgCount > ContextConfig.MAX_IMAGE_MESSAGES) {
             val pruned = mutableListOf<ExecutionRecord>()
-            var imagesToKeep = MAX_IMAGE_MESSAGES
+            var imagesToKeep = ContextConfig.MAX_IMAGE_MESSAGES
 
             for (record in recent) {
                 if (record.hasImage && imagesToKeep <= 0) {
@@ -235,7 +227,7 @@ class ContextManager {
      * Check if summarization is needed
      */
     fun needsSummarization(): Boolean {
-        return messages.size >= SUMMARY_THRESHOLD
+        return messages.size >= ContextConfig.SUMMARY_THRESHOLD
     }
 
     /**
@@ -248,8 +240,8 @@ class ContextManager {
         }
 
         // Keep the most recent messages, summarize the rest
-        val toSummarize = messages.dropLast(MAX_MESSAGES / 2)
-        val toKeep = messages.takeLast(MAX_MESSAGES / 2)
+        val toSummarize = messages.dropLast(ContextConfig.MAX_MESSAGES / 2)
+        val toKeep = messages.takeLast(ContextConfig.MAX_MESSAGES / 2)
 
         if (toSummarize.isEmpty()) {
             return false

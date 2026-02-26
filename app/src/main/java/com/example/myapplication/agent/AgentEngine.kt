@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.myapplication.accessibility.AutoService
 import com.example.myapplication.agent.models.*
 import com.example.myapplication.api.ZhipuApiClient
+import com.example.myapplication.config.AppConfig.Agent as AgentConfig
 import com.example.myapplication.screen.Base64Encoder
 import com.example.myapplication.screen.ImageCompressor
 import com.example.myapplication.screen.ScreenCapture
@@ -31,8 +32,6 @@ class AgentEngine(context: Context) {
 
     companion object {
         private const val TAG = "AgentEngine"
-        private const val DEFAULT_MAX_STEPS = 20
-        private const val STEP_DELAY_MS = 1000L
         private const val TOOL_RESULT_FINISH = "FINISH:"
         private const val TOOL_RESULT_REPLY = "REPLY:"
         private const val SCREENSHOT_PREFIX = "屏幕截图成功:"
@@ -48,7 +47,6 @@ class AgentEngine(context: Context) {
     private val imageCompressor = ImageCompressor()
     private val toolManager = ToolManager(context)
     private val toolRegistry = ToolRegistry.getInstance(context)
-    private val systemPromptBuilder = SystemPromptBuilder()
     private val contextManager = ContextManager()
     private val gson = Gson()
 
@@ -117,7 +115,7 @@ class AgentEngine(context: Context) {
     /**
      * Execute a task - AI controls the flow
      */
-    fun execute(instruction: String, maxSteps: Int = DEFAULT_MAX_STEPS): Job {
+    fun execute(instruction: String, maxSteps: Int = AgentConfig.DEFAULT_MAX_STEPS): Job {
         cancel()
 
         _state.value = AgentState(isRunning = true, maxSteps = maxSteps)
@@ -205,23 +203,33 @@ class AgentEngine(context: Context) {
      * Process Thinking state - call AI and get tool calls
      */
     private suspend fun processThinking(state: AgentLoopState.Thinking): AgentLoopState = withContext(Dispatchers.IO) {
+        // Check if cancelled
+        ensureActive()
+
         logger.d("Thinking - Step ${state.context.currentStep}/${state.context.maxSteps}")
 
         _state.value = _state.value.copy(currentStep = state.context.currentStep)
 
         // Build messages with system prompt
-        val systemPrompt = systemPromptBuilder.buildPrompt()
+        // Use ToolManager's system prompt (supports custom prompts from UI)
+        val systemPrompt = toolManager.generateSystemPrompt()
         val messages = contextManager.buildMessages(
             systemPrompt = systemPrompt,
             goal = state.context.goal,
             currentScreenBase64 = currentScreenBase64
         )
 
+        // Check if cancelled before API call
+        ensureActive()
+
         // Call AI
         val response = callAI(messages)
         if (response == null) {
             return@withContext AgentLoopState.Failed("AI调用失败", recoverable = true)
         }
+
+        // Check if cancelled after API call
+        ensureActive()
 
         logger.d("AI response: ${response.take(300)}...")
 
@@ -239,16 +247,10 @@ class AgentEngine(context: Context) {
         )
 
         if (toolCalls.isEmpty()) {
-            // No tool call - treat as chat response
+            // No tool call - treat as pure chat response, end the task
             onReply?.invoke(response)
-            contextManager.addUserMessage("[用户收到回复]")
 
-            // Continue to next step with reply sent
-            return@withContext AgentLoopState.Thinking(
-                context = state.context.copy(
-                    currentStep = state.context.currentStep + 1
-                )
-            )
+            return@withContext AgentLoopState.Completed(response)
         }
 
         // Notify tool calls
@@ -403,7 +405,7 @@ class AgentEngine(context: Context) {
         contextManager.addUserMessage("执行结果：${state.result.output}")
 
         // Continue to next thinking step
-        delay(STEP_DELAY_MS)
+        delay(AgentConfig.STEP_DELAY_MS)
 
         return AgentLoopState.Thinking(
             context = state.context.copy(

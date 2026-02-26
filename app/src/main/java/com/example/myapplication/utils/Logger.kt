@@ -72,6 +72,33 @@ class Logger(private val tag: String) {
             _logEntries.value = emptyList()
         }
 
+        /**
+         * Export logs as plain text string (for clipboard)
+         */
+        fun exportLogsAsString(): String {
+            val sb = StringBuilder()
+            sb.appendLine("=== App Logs Export ===")
+            sb.appendLine("Time: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+            sb.appendLine("Entries: ${_logEntries.value.size}")
+            sb.appendLine()
+
+            _logEntries.value.forEach { entry ->
+                val levelStr = when (entry.level) {
+                    LogLevel.ERROR -> "E"
+                    LogLevel.WARN -> "W"
+                    LogLevel.INFO -> "I"
+                    LogLevel.DEBUG -> "D"
+                    LogLevel.VERBOSE -> "V"
+                }
+                sb.appendLine("${entry.timestamp} $levelStr/${entry.tag}: ${entry.message}")
+                entry.throwable?.let {
+                    sb.appendLine("  Throwable: $it")
+                }
+            }
+
+            return sb.toString()
+        }
+
         private fun getDateString(): String {
             val sdf = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
             return sdf.format(Date())

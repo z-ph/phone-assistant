@@ -61,7 +61,6 @@ fun SystemPromptScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val agentEngine = remember { MyApplication.getTaskEngine().let { null } }
     val toolManager = remember { ToolManager(context) }
 
     LaunchedEffect(Unit) {

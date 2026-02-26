@@ -1,5 +1,8 @@
 package com.example.myapplication.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -26,6 +30,10 @@ class LogViewModel : ViewModel() {
     fun clearLogs() {
         Logger.clearLogs()
     }
+
+    fun exportLogsAsString(): String {
+        return Logger.exportLogsAsString()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,10 +44,12 @@ fun LogScreen(
 ) {
     val listState = rememberLazyListState()
     val logs by viewModel.logs.collectAsState()
+    val context = LocalContext.current
 
     var filterLevel by remember { mutableStateOf<LogLevel?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var autoScroll by remember { mutableStateOf(true) }
+    var showCopySuccess by remember { mutableStateOf(false) }
 
     // Auto-scroll to bottom when new logs arrive
     LaunchedEffect(logs.size, autoScroll) {
@@ -65,6 +75,16 @@ fun LogScreen(
             TopAppBar(
                 title = { Text("运行日志 (${logs.size})") },
                 actions = {
+                    // Copy to clipboard button
+                    IconButton(onClick = {
+                        val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val logText = viewModel.exportLogsAsString()
+                        val clip = ClipData.newPlainText("App Logs", logText)
+                        clipboardManager.setPrimaryClip(clip)
+                        showCopySuccess = true
+                    }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = "复制日志")
+                    }
                     IconButton(onClick = { autoScroll = !autoScroll }) {
                         Icon(
                             if (autoScroll) Icons.Default.KeyboardArrowDown else Icons.Default.MoreVert,
@@ -76,6 +96,24 @@ fun LogScreen(
                     }
                 }
             )
+        },
+        snackbarHost = {
+            if (showCopySuccess) {
+                LaunchedEffect(Unit) {
+                    delay(2000)
+                    showCopySuccess = false
+                }
+                Snackbar(
+                    modifier = Modifier.padding(16.dp),
+                    action = {
+                        TextButton(onClick = { showCopySuccess = false }) {
+                            Text("确定")
+                        }
+                    }
+                ) {
+                    Text("日志已复制到剪贴板")
+                }
+            }
         }
     ) { paddingValues ->
         Column(

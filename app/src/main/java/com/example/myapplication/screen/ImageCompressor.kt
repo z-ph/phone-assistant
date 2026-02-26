@@ -2,6 +2,7 @@ package com.example.myapplication.screen
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import com.example.myapplication.config.AppConfig.Image as ImgConfig
 import com.example.myapplication.utils.Logger
 import kotlin.math.max
 import kotlin.math.min
@@ -15,12 +16,12 @@ class ImageCompressor {
     companion object {
         private const val TAG = "ImageCompressor"
 
-        // Target dimensions for compression (as specified in plan)
-        const val TARGET_WIDTH = 768
-        const val TARGET_HEIGHT = 1366
+        // Target dimensions for compression (from AppConfig)
+        val TARGET_WIDTH: Int get() = ImgConfig.TARGET_WIDTH
+        val TARGET_HEIGHT: Int get() = ImgConfig.TARGET_HEIGHT
 
-        // Maximum file size (approximate, in bytes)
-        const val MAX_FILE_SIZE = 500 * 1024 // 500KB
+        // Maximum file size (from AppConfig)
+        val MAX_FILE_SIZE: Int get() = ImgConfig.MAX_FILE_SIZE
     }
 
     private val logger = Logger(TAG)
@@ -110,7 +111,7 @@ class ImageCompressor {
      */
     fun compressToMaxSize(
         bitmap: Bitmap,
-        maxSizeBytes: Int = MAX_FILE_SIZE,
+        maxSizeBytes: Int = ImgConfig.MAX_FILE_SIZE,
         initialQuality: Int = 90
     ): Bitmap {
         logger.d("Compressing to max size: ${maxSizeBytes} bytes")
@@ -147,7 +148,7 @@ class ImageCompressor {
         logger.d("Smart compress: original size ${originalWidth}x${originalHeight}")
 
         return when {
-            originalWidth > TARGET_WIDTH * 2 || originalHeight > TARGET_HEIGHT * 2 -> {
+            originalWidth > ImgConfig.TARGET_WIDTH * 2 || originalHeight > ImgConfig.TARGET_HEIGHT * 2 -> {
                 // Large screen - use two-step scaling for better quality
                 logger.d("Large screen detected, using two-step scaling")
                 val intermediateWidth = (originalWidth * 0.5f).toInt()
@@ -159,16 +160,16 @@ class ImageCompressor {
                 }
                 result
             }
-            originalWidth > TARGET_WIDTH || originalHeight > TARGET_HEIGHT -> {
+            originalWidth > ImgConfig.TARGET_WIDTH || originalHeight > ImgConfig.TARGET_HEIGHT -> {
                 // Medium screen - standard compression
                 compress(bitmap)
             }
             else -> {
                 // Small screen - might need upscaling if too small
-                if (originalWidth < TARGET_WIDTH / 2 || originalHeight < TARGET_HEIGHT / 2) {
+                if (originalWidth < ImgConfig.TARGET_WIDTH / 2 || originalHeight < ImgConfig.TARGET_HEIGHT / 2) {
                     val scaleUp = max(
-                        TARGET_WIDTH.toFloat() / originalWidth,
-                        TARGET_HEIGHT.toFloat() / originalHeight
+                        ImgConfig.TARGET_WIDTH.toFloat() / originalWidth,
+                        ImgConfig.TARGET_HEIGHT.toFloat() / originalHeight
                     )
                     if (scaleUp > 2f) {
                         val scaledWidth = (originalWidth * scaleUp).toInt()

@@ -3,6 +3,8 @@ package com.example.myapplication.engine
 import com.example.myapplication.accessibility.ActionExecutor
 import com.example.myapplication.accessibility.ActionResult
 import com.example.myapplication.api.model.UiAction
+import com.example.myapplication.config.AppConfig.ActionDelays as Delays
+import com.example.myapplication.config.AppConfig.Retry as RetryConfig
 import com.example.myapplication.utils.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,12 +25,6 @@ class ActionQueue {
 
     companion object {
         private const val TAG = "ActionQueue"
-
-        // Queue settings
-        private const val DEFAULT_RETRY_ATTEMPTS = 2
-        private const val RETRY_DELAY_MS = 500L
-        private const val ACTION_TIMEOUT_MS = 5000L
-        private const val QUEUE_PROCESS_INTERVAL_MS = 100L
     }
 
     private val logger = Logger(TAG)
@@ -174,7 +170,7 @@ class ActionQueue {
                         break
                     }
 
-                    delay(QUEUE_PROCESS_INTERVAL_MS)
+                    delay(Delays.QUEUE_PROCESS_INTERVAL_MS)
                     continue
                 }
 
@@ -185,7 +181,7 @@ class ActionQueue {
                     executeAction(nextAction)
                 }
 
-                delay(QUEUE_PROCESS_INTERVAL_MS)
+                delay(Delays.QUEUE_PROCESS_INTERVAL_MS)
             }
         }
     }
@@ -197,7 +193,7 @@ class ActionQueue {
 
         val result = withContext(Dispatchers.IO) {
             try {
-                withTimeout(ACTION_TIMEOUT_MS) {
+                withTimeout(Delays.ACTION_TIMEOUT_MS) {
                     executor.executeAction(queuedAction.action)
                 }
             } catch (e: Exception) {
@@ -220,11 +216,11 @@ class ActionQueue {
             // Retry logic
             val currentAttempts = queuedAction.attempts + 1
 
-            if (currentAttempts <= DEFAULT_RETRY_ATTEMPTS) {
+            if (currentAttempts <= RetryConfig.DEFAULT_RETRY_ATTEMPTS) {
                 updateAction(queuedAction.copy(attempts = currentAttempts))
                 updateActionStatus(queuedAction.id, ActionStatus.PENDING)
-                logger.d("Action ${queuedAction.id} failed, retrying ($currentAttempts/$DEFAULT_RETRY_ATTEMPTS)")
-                delay(RETRY_DELAY_MS)
+                logger.d("Action ${queuedAction.id} failed, retrying ($currentAttempts/${RetryConfig.DEFAULT_RETRY_ATTEMPTS})")
+                delay(Delays.LONG_DELAY_MS)
             } else {
                 updateActionStatus(queuedAction.id, ActionStatus.FAILED)
                 _failedCount.value++
