@@ -98,3 +98,9 @@ lint/tmp/
 *.env
 secrets.properties
 api_keys.xml
+
+# IDE
+.idea/
+
+# Screenshots
+screenshot*.png
