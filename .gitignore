@@ -104,3 +104,16 @@ api_keys.xml
 
 # Screenshots
 screenshot*.png
+
+# Android SDK (downloaded locally)
+build-tools/
+platform-tools/
+platforms/
+licenses/
+cmdline-tools/
+
+# Kotlin
+*.kotlin_module
+
+# Local tool configs
+.golutra/
