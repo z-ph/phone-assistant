@@ -8,6 +8,7 @@ import com.example.myapplication.config.AppConfig.Agent as AgentConfig
 import com.example.myapplication.screen.Base64Encoder
 import com.example.myapplication.screen.ImageCompressor
 import com.example.myapplication.screen.ScreenCapture
+import com.example.myapplication.shell.ShellExecutor
 import com.example.myapplication.utils.Logger
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -48,6 +49,7 @@ class AgentEngine(context: Context) {
     private val toolManager = ToolManager(context)
     private val toolRegistry = ToolRegistry.getInstance(context)
     private val contextManager = ContextManager()
+    private val shellExecutor = ShellExecutor(context)
     private val gson = Gson()
 
     // Execution context for tools
@@ -58,7 +60,8 @@ class AgentEngine(context: Context) {
             screenHeight = screenHeight,
             screenCapture = screenCapture,
             base64Encoder = base64Encoder,
-            imageCompressor = imageCompressor
+            imageCompressor = imageCompressor,
+            shellExecutor = shellExecutor
         )
 
     // API client
@@ -506,6 +509,10 @@ class AgentEngine(context: Context) {
                 val packageName = tc.parameters["package_name"] as? String ?: ""
                 AgentAction.OpenApp(packageName)
             }
+            "force_stop_app" -> {
+                val packageName = tc.parameters["package_name"] as? String ?: ""
+                AgentAction.ForceStopApp(packageName)
+            }
             "list_apps" -> AgentAction.ListApps
             "finish" -> {
                 val summary = tc.parameters["summary"] as? String ?: "任务完成"
@@ -635,6 +642,7 @@ sealed class AgentAction {
     // 其他
     data class Wait(val duration: Long) : AgentAction()
     data class OpenApp(val packageName: String) : AgentAction()
+    data class ForceStopApp(val packageName: String) : AgentAction()
     object ListApps : AgentAction()
     data class Finish(val summary: String) : AgentAction()
     data class Reply(val message: String) : AgentAction()
@@ -661,6 +669,7 @@ sealed class AgentAction {
         is Paste -> "Paste()"
         is Wait -> "Wait(${duration}ms)"
         is OpenApp -> "OpenApp($packageName)"
+        is ForceStopApp -> "ForceStopApp($packageName)"
         is ListApps -> "ListApps()"
         is Finish -> "Finish(\"$summary\")"
         is Reply -> "Reply(\"${message.take(30)}\")"

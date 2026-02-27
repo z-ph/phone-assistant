@@ -12,6 +12,7 @@ import com.example.myapplication.config.AppConfig.Coordinates as Coords
 import com.example.myapplication.screen.Base64Encoder
 import com.example.myapplication.screen.ImageCompressor
 import com.example.myapplication.screen.ScreenCapture
+import com.example.myapplication.shell.ShellExecutor
 import com.example.myapplication.utils.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -60,7 +61,8 @@ data class ToolExecutionContext(
     val screenHeight: Int,
     val screenCapture: ScreenCapture,
     val base64Encoder: Base64Encoder,
-    val imageCompressor: ImageCompressor
+    val imageCompressor: ImageCompressor,
+    val shellExecutor: ShellExecutor? = null
 )
 
 /**
@@ -127,6 +129,7 @@ class ToolRegistry private constructor(private val context: Context) {
         // === CONTROL TOOLS ===
         register(createWaitTool())
         register(createOpenAppTool())
+        register(createForceStopAppTool())
         register(createFinishTool())
         register(createReplyTool())
 
@@ -255,6 +258,20 @@ class ToolRegistry private constructor(private val context: Context) {
         parameters = emptyList(),
         execute = { _, ctx ->
             try {
+                // Use ShellExecutor if available for more reliable results
+                val shellExecutor = ctx.shellExecutor
+                if (shellExecutor != null && shellExecutor.isShellAvailable()) {
+                    val result = shellExecutor.listAllApps(includeSystem = false, includeNonLaunchable = false)
+                    if (result.isSuccess) {
+                        val apps = result.getOrNull() ?: emptyList()
+                        val appList = apps.take(50).joinToString("\n") { app ->
+                            "${app.label} = ${app.packageName}"
+                        }
+                        return@Tool ToolResult.success("已安装的应用(${apps.size}个):\n$appList")
+                    }
+                }
+
+                // Fallback to PackageManager
                 val pm = ctx.appContext.packageManager
                 val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
                     .filter { pm.getLaunchIntentForPackage(it.packageName) != null }
@@ -587,32 +604,85 @@ class ToolRegistry private constructor(private val context: Context) {
             ToolParam("package_name", "string", "应用包名或应用名称")
         ),
         execute = { params, ctx ->
+            val packageName = params["package_name"] as? String ?: ""
+
+            // Try ShellExecutor first for reliable launching
+            val shellExecutor = ctx.shellExecutor
+            if (shellExecutor != null) {
+                // If input doesn't look like a package name, find by app name
+                val actualPackageName = if (!packageName.contains(".")) {
+                    shellExecutor.findAppByName(packageName) ?: packageName
+                } else {
+                    packageName
+                }
+
+                val result = shellExecutor.launchApp(actualPackageName)
+                if (result.isSuccess) {
+                    return@Tool ToolResult.success(result.getOrNull() ?: "打开应用成功")
+                }
+                // If ShellExecutor fails, fall through to PackageManager method
+            }
+
+            // Fallback to PackageManager
             try {
                 val pm = ctx.appContext.packageManager
-                var packageName = params["package_name"] as? String ?: ""
+                var resolvedPackageName = packageName
 
                 // If input doesn't look like a package name, try to find by app name
-                if (!packageName.contains(".")) {
+                if (!resolvedPackageName.contains(".")) {
                     val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
                     val matchedApp = apps.find {
-                        pm.getApplicationLabel(it).toString().contains(packageName, ignoreCase = true)
+                        pm.getApplicationLabel(it).toString().contains(resolvedPackageName, ignoreCase = true)
                     }
                     if (matchedApp != null) {
-                        packageName = matchedApp.packageName
+                        resolvedPackageName = matchedApp.packageName
                     }
                 }
 
-                val intent = pm.getLaunchIntentForPackage(packageName)
+                val intent = pm.getLaunchIntentForPackage(resolvedPackageName)
                 if (intent != null) {
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     ctx.appContext.startActivity(intent)
-                    val label = pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0))
-                    ToolResult.success("打开应用成功: $label ($packageName)")
+                    val label = pm.getApplicationLabel(pm.getApplicationInfo(resolvedPackageName, 0))
+                    ToolResult.success("打开应用成功: $label ($resolvedPackageName)")
                 } else {
                     ToolResult.failure("找不到应用: ${params["package_name"]}。使用 list_apps 查看已安装的应用列表")
                 }
             } catch (e: Exception) {
                 ToolResult.failure("打开应用失败: ${e.message}。使用 list_apps 查看已安装的应用列表")
+            }
+        }
+    )
+
+    private fun createForceStopAppTool() = Tool(
+        name = "force_stop_app",
+        description = "强制停止指定的应用程序。可以输入包名或应用名称。需要 Shizuku 权限。",
+        category = ToolCategory.SYSTEM,
+        parameters = listOf(
+            ToolParam("package_name", "string", "应用包名或应用名称")
+        ),
+        execute = { params, ctx ->
+            val shellExecutor = ctx.shellExecutor
+                ?: return@Tool ToolResult.failure("Shell执行器不可用")
+
+            if (!shellExecutor.isShellAvailable()) {
+                return@Tool ToolResult.failure("Shizuku 未就绪，无法强制停止应用。请确保已安装并授权 Shizuku。")
+            }
+
+            val packageName = params["package_name"] as? String ?: ""
+
+            // Resolve package name if app name was provided
+            val actualPackageName = if (!packageName.contains(".")) {
+                shellExecutor.findAppByName(packageName) ?: packageName
+            } else {
+                packageName
+            }
+
+            val result = shellExecutor.forceStopApp(actualPackageName)
+            if (result.isSuccess) {
+                ToolResult.success(result.getOrNull() ?: "强制停止成功")
+            } else {
+                ToolResult.failure(result.exceptionOrNull()?.message ?: "强制停止失败")
             }
         }
     )
