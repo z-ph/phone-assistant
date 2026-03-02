@@ -42,7 +42,7 @@ class AgentEngine(context: Context) {
     }
 
     private val logger = Logger(TAG)
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val scope = CoroutineScope(Dispatchers.Main + Job())
     private val appContext = context.applicationContext
 
     // Dependencies
@@ -150,14 +150,21 @@ class AgentEngine(context: Context) {
         logger.d("cancel() called")
         // 首先取消协程 Job
         currentJob?.cancel()
-        // 重置循环状态
-        loopState = AgentLoopState.Idle
-        // 清空当前任务 Job 引用
-        currentJob = null
-        // 更新 UI 状态
-        _state.value = AgentState(isRunning = false)
-        // 清空屏幕缓存
-        currentScreenBase64.set(null)
+
+        // 在主线程上同步更新状态，确保 UI 立即响应
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                // 重置循环状态
+                loopState = AgentLoopState.Idle
+                // 清空当前任务 Job 引用
+                currentJob = null
+                // 保留当前步骤和其他状态，只更新 isRunning 为 false
+                _state.value = _state.value.copy(isRunning = false)
+                // 清空屏幕缓存
+                currentScreenBase64.set(null)
+            }
+        }
+        logger.d("cancel() completed, isRunning=${_state.value.isRunning}")
     }
 
     /**
@@ -318,6 +325,9 @@ class AgentEngine(context: Context) {
      * Process Acting state - execute tools sequentially
      */
     private suspend fun processActing(state: AgentLoopState.Acting): AgentLoopState = withContext(Dispatchers.Main) {
+        // Check if cancelled at the start of each tool execution
+        coroutineContext.ensureActive()
+
         if (state.pendingTools.isEmpty()) {
             // All tools executed, transition to Observing
             val combinedSuccess = state.executedResults.all { it.success }
@@ -449,6 +459,9 @@ class AgentEngine(context: Context) {
      * Process Observing state - analyze results and decide next step
      */
     private suspend fun processObserving(state: AgentLoopState.Observing): AgentLoopState {
+        // Check if cancelled
+        coroutineContext.ensureActive()
+
         logger.d("Observing - Result: ${state.result.output.take(100)}")
 
         // Add tool results to context with proper tool_call_id pairing
@@ -630,10 +643,19 @@ class AgentEngine(context: Context) {
      * Call AI API
      */
     private suspend fun callAI(messages: List<Map<String, Any>>): String? = withContext(Dispatchers.IO) {
+        // Check if cancelled before making API call
+        if (!isActive) {
+            logger.d("Cancelled before AI call")
+            return@withContext null
+        }
+
         val client = apiClient ?: return@withContext null
         try {
             client.chatWithTools(messages, toolRegistry.toOpenAIToolsFormat())
                 ?.choices?.firstOrNull()?.message?.content
+        } catch (e: CancellationException) {
+            logger.d("AI call cancelled")
+            null
         } catch (e: Exception) {
             logger.e("AI call error: ${e.message}")
             null

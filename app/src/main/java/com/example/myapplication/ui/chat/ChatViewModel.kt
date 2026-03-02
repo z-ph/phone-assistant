@@ -298,7 +298,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelTask() {
         logger.d("cancelTask called")
-        // 首先取消 agentEngine 的 job
+        // 首先取消 agentEngine 的 job，这会立即更新 agentEngine.state
         agentEngine.cancel()
         // 然后取消 ViewModel 的协程 job
         currentTaskJob?.cancel()
