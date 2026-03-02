@@ -300,8 +300,8 @@ class ToolRegistry private constructor(private val context: Context) {
             val service = AutoService.getInstance()
                 ?: return@Tool ToolResult.failure("无障碍服务未启用")
 
-            val x = params["x"]?.toFloat() ?: 0f
-            val y = params["y"]?.toFloat() ?: 0f
+            val x = (params["x"] as? Number)?.toFloat() ?: 0f
+            val y = (params["y"] as? Number)?.toFloat() ?: 0f
             // 确保坐标在有效范围内
             val normalizedX = x.coerceIn(0f, Coords.NORMALIZED_WIDTH.toFloat())
             val normalizedY = y.coerceIn(0f, Coords.NORMALIZED_HEIGHT.toFloat())
@@ -328,9 +328,9 @@ class ToolRegistry private constructor(private val context: Context) {
             val service = AutoService.getInstance()
                 ?: return@Tool ToolResult.failure("无障碍服务未启用")
 
-            val x = params["x"]?.toFloat() ?: 0f
-            val y = params["y"]?.toFloat() ?: 0f
-            val duration = params["duration"]?.toLong() ?: Delays.LONG_DELAY_MS
+            val x = (params["x"] as? Number)?.toFloat() ?: 0f
+            val y = (params["y"] as? Number)?.toFloat() ?: 0f
+            val duration = (params["duration"] as? Number)?.toLong() ?: Delays.LONG_DELAY_MS
             val normalizedX = x.coerceIn(0f, Coords.NORMALIZED_WIDTH.toFloat())
             val normalizedY = y.coerceIn(0f, Coords.NORMALIZED_HEIGHT.toFloat())
             val realX = normalizedX * ctx.screenWidth / Coords.NORMALIZED_WIDTH.toFloat()
@@ -353,8 +353,8 @@ class ToolRegistry private constructor(private val context: Context) {
             val service = AutoService.getInstance()
                 ?: return@Tool ToolResult.failure("无障碍服务未启用")
 
-            val x = params["x"]?.toFloat() ?: 0f
-            val y = params["y"]?.toFloat() ?: 0f
+            val x = (params["x"] as? Number)?.toFloat() ?: 0f
+            val y = (params["y"] as? Number)?.toFloat() ?: 0f
             val normalizedX = x.coerceIn(0f, Coords.NORMALIZED_WIDTH.toFloat())
             val normalizedY = y.coerceIn(0f, Coords.NORMALIZED_HEIGHT.toFloat())
             val realX = normalizedX * ctx.screenWidth / Coords.NORMALIZED_WIDTH.toFloat()
@@ -378,7 +378,7 @@ class ToolRegistry private constructor(private val context: Context) {
                 ?: return@Tool ToolResult.failure("无障碍服务未启用")
 
             val direction = params["direction"] as? String ?: "up"
-            val distance = params["distance"]?.toInt() ?: 500
+            val distance = (params["distance"] as? Number)?.toInt() ?: 500
 
             val swipeDir = when (direction.lowercase()) {
                 "up" -> SwipeDirection.UP
@@ -409,10 +409,10 @@ class ToolRegistry private constructor(private val context: Context) {
             val service = AutoService.getInstance()
                 ?: return@Tool ToolResult.failure("无障碍服务未启用")
 
-            val startX = params["start_x"]?.toFloat() ?: 0f
-            val startY = params["start_y"]?.toFloat() ?: 0f
-            val endX = params["end_x"]?.toFloat() ?: 0f
-            val endY = params["end_y"]?.toFloat() ?: 0f
+            val startX = (params["start_x"] as? Number)?.toFloat() ?: 0f
+            val startY = (params["start_y"] as? Number)?.toFloat() ?: 0f
+            val endX = (params["end_x"] as? Number)?.toFloat() ?: 0f
+            val endY = (params["end_y"] as? Number)?.toFloat() ?: 0f
 
             val normalizedStartX = startX.coerceIn(0f, Coords.NORMALIZED_WIDTH.toFloat())
             val normalizedStartY = startY.coerceIn(0f, Coords.NORMALIZED_HEIGHT.toFloat())

@@ -238,7 +238,7 @@ class FloatingWindowService : Service() {
 
         headerLayout.addView(statusIndicator)
         headerLayout.addView(statusText!!)
-        headerLayout.addView(stopBtn)
+        headerLayout.addView(stopButton!!)
         headerLayout.addView(minimizeBtn)
         headerLayout.addView(closeBtn)
 
