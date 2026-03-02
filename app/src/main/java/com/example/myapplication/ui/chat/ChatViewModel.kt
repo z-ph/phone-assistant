@@ -162,12 +162,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun createNewSession(title: String = "新会话") {
         viewModelScope.launch {
+            // Clear agent context when creating new session
+            agentEngine.clearContext()
             val session = repository.createSession(title)
             _currentSessionId.value = session.id
         }
     }
 
     fun selectSession(sessionId: String) {
+        // Clear agent context when switching sessions
+        agentEngine.clearContext()
         _currentSessionId.value = sessionId
     }
 

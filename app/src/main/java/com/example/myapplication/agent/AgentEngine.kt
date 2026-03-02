@@ -495,70 +495,37 @@ class AgentEngine(context: Context) {
     }
 
     /**
-     * Parse tool calls from AI response
+     * Parse tool calls from AI response (function calling format only)
+     *
+     * Expects response in format: __TOOL_CALLS__[{"name": "...", "parameters": {...}}, ...]
+     * This is the only supported format - no fallback to text parsing.
      */
     private fun parseToolCalls(response: String): List<ToolCallInfo> {
-        // Check for new format (function calling) with stricter detection
-        // Look for __TOOL_CALLS__ marker that must be followed by valid JSON array
-        val markerPattern = Regex("""^__TOOL_CALLS__\s*\[""", RegexOption.MULTILINE)
-        val markerMatch = markerPattern.find(response)
-
-        if (markerMatch != null) {
-            return try {
-                // Find the start of JSON array
-                val jsonStartIndex = response.indexOf("__TOOL_CALLS__") + "__TOOL_CALLS__".length
-                val jsonContent = response.substring(jsonStartIndex).trim()
-
-                // Validate JSON structure
-                if (!jsonContent.startsWith("[")) {
-                    logger.w("Invalid tool calls format: missing opening bracket")
-                    return emptyList()
-                }
-
-                // Find matching closing bracket
-                var bracketCount = 0
-                var jsonEndIndex = 0
-                for ((index, char) in jsonContent.withIndex()) {
-                    when (char) {
-                        '[' -> bracketCount++
-                        ']' -> {
-                            bracketCount--
-                            if (bracketCount == 0) {
-                                jsonEndIndex = index + 1
-                                break
-                            }
-                        }
-                    }
-                }
-
-                if (bracketCount != 0) {
-                    logger.w("Invalid tool calls format: unbalanced brackets")
-                    return emptyList()
-                }
-
-                val json = jsonContent.substring(0, jsonEndIndex)
-                val type = object : TypeToken<List<ToolCall>>() {}.type
-                val calls = gson.fromJson<List<ToolCall>>(json, type) ?: emptyList()
-                calls.map { tc ->
-                    ToolCallInfo(
-                        id = tc.id.ifEmpty { "call_${System.nanoTime()}" },
-                        name = tc.name,
-                        parameters = tc.parameters
-                    )
-                }
-            } catch (e: Exception) {
-                logger.e("Failed to parse tool calls: ${e.message}")
-                emptyList()
-            }
+        // Check for __TOOL_CALLS__ marker
+        if (!response.contains("__TOOL_CALLS__")) {
+            logger.w("No tool calls found in response (missing __TOOL_CALLS__ marker)")
+            return emptyList()
         }
 
-        // Fallback: parse from text (old format)
-        return toolManager.parseToolCalls(response).map { tc ->
-            ToolCallInfo(
-                id = tc.id.ifEmpty { "call_${System.nanoTime()}" },
-                name = tc.name,
-                parameters = tc.parameters
-            )
+        return try {
+            // Extract JSON array after marker
+            val jsonStartIndex = response.indexOf("__TOOL_CALLS__") + "__TOOL_CALLS__".length
+            val jsonContent = response.substring(jsonStartIndex).trim()
+
+            // Parse JSON array
+            val type = object : TypeToken<List<ToolCall>>() {}.type
+            val calls = gson.fromJson<List<ToolCall>>(jsonContent, type) ?: emptyList()
+
+            calls.map { tc ->
+                ToolCallInfo(
+                    id = tc.id.ifEmpty { "call_${System.nanoTime()}" },
+                    name = tc.name,
+                    parameters = tc.parameters
+                )
+            }
+        } catch (e: Exception) {
+            logger.e("Failed to parse tool calls: ${e.message}")
+            emptyList()
         }
     }
 
@@ -671,15 +638,10 @@ class AgentEngine(context: Context) {
     }
 
     /**
-     * Extract thinking from response
+     * Extract thinking content from response (before __TOOL_CALLS__ marker)
      */
     private fun extractThinking(response: String): String? {
-        val toolCallIndex = response.indexOfAny(listOf(
-            "click(", "swipe(", "type(", "back()", "home()",
-            "wait(", "finish(", "reply(", "capture_screen(", "open_app(",
-            "__TOOL_CALLS__"
-        ))
-
+        val toolCallIndex = response.indexOf("__TOOL_CALLS__")
         if (toolCallIndex < 0) return null
 
         val thinking = response.substring(0, toolCallIndex).trim()
