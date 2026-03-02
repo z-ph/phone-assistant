@@ -437,7 +437,9 @@ fun ApiConfigEditDialog(
                     ApiProviders.ALL.forEach { provider ->
                         val onProviderSelected = {
                             selectedProvider = provider
-                            if (baseUrl.isEmpty() || ApiProviders.ALL.any { it.defaultBaseUrl == baseUrl }) {
+                            if (provider.id == "custom") {
+                                baseUrl = ""
+                            } else if (baseUrl.isEmpty() || ApiProviders.ALL.any { it.defaultBaseUrl == baseUrl }) {
                                 baseUrl = provider.defaultBaseUrl
                             }
                             if (modelId.isEmpty() || ApiProviders.ALL.any { it.defaultModel == modelId }) {

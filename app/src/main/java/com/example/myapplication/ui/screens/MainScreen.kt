@@ -39,6 +39,7 @@ private const val TAG = "MainScreen"
 fun MainScreen(
     taskEngine: TaskEngine,
     apiClient: ZhipuApiClient,
+    onNavigateToApiConfig: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -48,12 +49,11 @@ fun MainScreen(
     val isRunning by taskEngine.isRunning.collectAsState()
     val taskStatus by taskEngine.taskStatus.collectAsState()
     val readinessStatus by remember { derivedStateOf { taskEngine.getReadinessStatus() } }
-    val currentPrompt by taskEngine.currentPrompt.collectAsState()
     val lastActions by taskEngine.lastActions.collectAsState()
     val error by taskEngine.error.collectAsState()
 
     var promptInput by remember { mutableStateOf("") }
-    var showApiDialog by remember { mutableStateOf(false) }
+
 
     // Screen capture permission launcher
     val screenCaptureLauncher = rememberLauncherForActivityResult(
@@ -71,7 +71,7 @@ fun MainScreen(
             TopAppBar(
                 title = { Text("API 设置") },
                 actions = {
-                    IconButton(onClick = { showApiDialog = true }) {
+                    IconButton(onClick = onNavigateToApiConfig) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 }
@@ -113,7 +113,7 @@ fun MainScreen(
             item {
                 ApiConfigCard(
                     apiClient = apiClient,
-                    onShowFullConfig = { showApiDialog = true }
+                    onShowFullConfig = onNavigateToApiConfig
                 )
             }
 
@@ -154,13 +154,6 @@ fun MainScreen(
         }
     }
 
-    // API Configuration Dialog
-    if (showApiDialog) {
-        ApiConfigDialog(
-            apiClient = apiClient,
-            onDismiss = { showApiDialog = false }
-        )
-    }
 }
 
 @Composable
@@ -241,156 +234,6 @@ fun ApiConfigCard(
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ApiConfigDialog(
-    apiClient: ZhipuApiClient,
-    onDismiss: () -> Unit
-) {
-    var selectedProvider by remember { mutableStateOf(apiClient.currentProvider) }
-    var apiKey by remember { mutableStateOf(apiClient.apiKey) }
-    var baseUrl by remember { mutableStateOf(apiClient.baseUrl) }
-    var modelId by remember { mutableStateOf(apiClient.modelId) }
-    var showAdvanced by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("API 配置") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Provider selection
-                Text(
-                    text = "选择提供商",
-                    style = MaterialTheme.typography.labelMedium
-                )
-
-                ExposedDropdownMenuBox(
-                    expanded = false,
-                    onExpandedChange = { }
-                ) {
-                    OutlinedTextField(
-                        value = selectedProvider.name,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Provider") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = false)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                // Provider quick select buttons
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    ApiProviders.ALL.forEach { provider ->
-                        OutlinedButton(
-                            onClick = {
-                                selectedProvider = provider
-                                if (baseUrl.isEmpty() || ApiProviders.ALL.any { it.defaultBaseUrl == baseUrl }) {
-                                    baseUrl = provider.defaultBaseUrl
-                                }
-                                if (modelId.isEmpty() || ApiProviders.ALL.any { it.defaultModel == modelId }) {
-                                    modelId = provider.defaultModel
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = if (selectedProvider.id == provider.id)
-                                    MaterialTheme.colorScheme.primaryContainer
-                                else
-                                    MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Text(provider.name)
-                        }
-                    }
-                }
-
-                HorizontalDivider()
-
-                // API Key
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it },
-                    label = { Text("API Key") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Advanced settings toggle
-                TextButton(
-                    onClick = { showAdvanced = !showAdvanced }
-                ) {
-                    Icon(
-                        if (showAdvanced) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = null
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(if (showAdvanced) "隐藏高级设置" else "显示高级设置")
-                }
-
-                if (showAdvanced) {
-                    // Base URL
-                    OutlinedTextField(
-                        value = baseUrl,
-                        onValueChange = { baseUrl = it },
-                        label = { Text("Base URL") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text(selectedProvider.defaultBaseUrl) }
-                    )
-
-                    // Model ID
-                    OutlinedTextField(
-                        value = modelId,
-                        onValueChange = { modelId = it },
-                        label = { Text("Model ID") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text(selectedProvider.defaultModel) }
-                    )
-
-                    // Show full URL
-                    Text(
-                        text = "完整URL: ${selectedProvider.getFullUrl(baseUrl.ifEmpty { selectedProvider.defaultBaseUrl })}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    apiClient.saveConfig(
-                        provider = selectedProvider,
-                        key = apiKey,
-                        url = baseUrl,
-                        model = modelId
-                    )
-                    onDismiss()
-                },
-                enabled = apiKey.isNotBlank()
-            ) {
-                Text("保存")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    )
 }
 
 @Composable

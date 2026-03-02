@@ -157,6 +157,7 @@ fun MainApp(
                     MainScreen(
                         taskEngine = taskEngine,
                         apiClient = apiClient,
+                        onNavigateToApiConfig = { currentDestination = AppDestinations.API_CONFIG },
                         modifier = Modifier.padding(paddingValues)
                     )
                 }

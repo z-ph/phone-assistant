@@ -62,7 +62,8 @@
       "Bash(brew list --cask)",
       "Bash(/opt/homebrew/share/android-commandlinetools/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk)",
       "Bash(/opt/homebrew/share/android-commandlinetools/platform-tools/adb devices -l)",
-      "Bash(echo $PATH)"
+      "Bash(echo $PATH)",
+      "mcp__appium__swipe_on_screen"
     ]
   }
 }
