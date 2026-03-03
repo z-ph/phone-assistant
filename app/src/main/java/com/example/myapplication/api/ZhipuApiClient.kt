@@ -12,6 +12,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.JsonSyntaxException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -31,11 +32,20 @@ class ZhipuApiClient(context: Context) {
 
     companion object {
         private const val TAG = "ZhipuApiClient"
+        private const val FAILURE_THRESHOLD = 5
+        private const val RESET_TIMEOUT_MS = 60000L
+        private const val MAX_RETRY_ATTEMPTS = 3
+        private const val BASE_RETRY_DELAY_MS = 1000L
     }
 
     private val logger = Logger(TAG)
     private val prefs = PreferencesManager.getInstance(context)
     private val context = context.applicationContext
+    private val circuitBreaker = CircuitBreaker(
+        failureThreshold = FAILURE_THRESHOLD,
+        resetTimeoutMs = RESET_TIMEOUT_MS,
+        tag = TAG
+    )
 
     // API configuration - all properties delegate directly to PreferencesManager
     // This ensures all parts of the app see the same values
@@ -397,6 +407,26 @@ class ZhipuApiClient(context: Context) {
         messages: List<Map<String, Any>>,
         tools: List<Map<String, Any>>? = null
     ): ApiResponse? = withContext(Dispatchers.IO) {
+        // Check circuit breaker first
+        if (circuitBreaker.getState() == CircuitBreaker.State.OPEN) {
+            logger.w("Circuit breaker is OPEN - failing fast")
+            val stats = circuitBreaker.getStats()
+            logger.w("Circuit stats: state=${stats.state}, failures=${stats.failureCount}, timeSinceFailure=${stats.timeSinceLastFailure}ms")
+            return@withContext null
+        }
+
+        return@withContext retryWithExponentialBackoff {
+            chatWithToolsInternal(messages, tools)
+        }
+    }
+
+    /**
+     * Internal implementation of chatWithTools
+     */
+    private suspend fun chatWithToolsInternal(
+        messages: List<Map<String, Any>>,
+        tools: List<Map<String, Any>>? = null
+    ): ApiResponse? = withContext(Dispatchers.IO) {
         try {
             logger.d("chatWithTools called")
             logger.d("API URL: $apiUrl")
@@ -448,17 +478,52 @@ class ZhipuApiClient(context: Context) {
 
             if (!response.isSuccessful || responseBody == null) {
                 logger.e("API call failed: ${response.code} - $responseBody")
-                return@withContext null
+                throw ApiException("HTTP ${response.code}: ${response.message}")
             }
 
             logger.d("Response body: ${responseBody.take(800)}...")
 
             // Parse response and extract tool calls
+            // Success will be recorded by retryWithExponentialBackoff wrapper
             parseToolCallResponse(responseBody)
         } catch (e: Exception) {
             logger.e("chatWithTools error: ${e.message}", e)
-            null
+            throw e // Re-throw for retry logic to handle
         }
+    }
+
+    /**
+     * Retry with exponential backoff
+     * Uses circuit breaker to track failures
+     */
+    private suspend fun <T> retryWithExponentialBackoff(
+        block: suspend () -> T
+    ): T? {
+        var lastException: Exception? = null
+        var delayMs = BASE_RETRY_DELAY_MS
+
+        for (attempt in 1..MAX_RETRY_ATTEMPTS) {
+            try {
+                return circuitBreaker.execute(block)
+            } catch (e: Exception) {
+                lastException = e
+                logger.w("Attempt $attempt/$MAX_RETRY_ATTEMPTS failed: ${e.message}")
+                
+                if (attempt < MAX_RETRY_ATTEMPTS) {
+                    logger.d("Retrying in ${delayMs}ms...")
+                    delay(delayMs)
+                    delayMs *= 2 // Exponential backoff
+                }
+            }
+        }
+
+        logger.e("All $MAX_RETRY_ATTEMPTS attempts failed")
+        circuitBreaker.getState().let { state ->
+            if (state == CircuitBreaker.State.OPEN) {
+                logger.w("Circuit breaker is now OPEN - will fail fast on next calls")
+            }
+        }
+        return null
     }
 
     /**
