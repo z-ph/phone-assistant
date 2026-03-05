@@ -16,7 +16,9 @@ import androidx.compose.ui.unit.dp
 import com.example.myapplication.MyApplication
 import com.example.myapplication.agent.LangChainAgentEngine
 import com.example.myapplication.utils.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TAG = "ApiTestScreen"
 
@@ -87,15 +89,19 @@ fun ApiTestScreen(
             ) {
                 Button(
                     onClick = {
-                        isTesting = true
-                        testResult = null
-                        langChainAgentEngine.execute(testPrompt) { result ->
-                            testResult = when {
-                                result.success && !result.isReply -> "✅ 成功：${result.message}"
-                                result.success && result.isReply -> "💬 回复：${result.message}"
-                                else -> "❌ 失败：${result.message}"
+                        scope.launch {
+                            isTesting = true
+                            testResult = null
+                            withContext(Dispatchers.IO) {
+                                langChainAgentEngine.execute(testPrompt) { result ->
+                                    testResult = when {
+                                        result.success && !result.isReply -> "✅ 成功：${result.message}"
+                                        result.success && result.isReply -> "💬 回复：${result.message}"
+                                        else -> "❌ 失败：${result.message}"
+                                    }
+                                    isTesting = false
+                                }
                             }
-                            isTesting = false
                         }
                     },
                     enabled = agentState.state == LangChainAgentEngine.AgentStateType.READY && !isTesting,

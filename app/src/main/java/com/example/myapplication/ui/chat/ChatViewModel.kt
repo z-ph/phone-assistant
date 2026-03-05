@@ -12,10 +12,12 @@ import com.example.myapplication.data.model.ChatSession
 import com.example.myapplication.data.repository.ChatRepository
 import com.example.myapplication.ui.overlay.FloatingWindowService
 import com.example.myapplication.utils.Logger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 private const val TAG = "ChatViewModel"
@@ -163,7 +165,9 @@ class ChatViewModel(
             FloatingWindowService.getInstance()?.show()
 
             try {
-                langChainAgentEngine.execute(instruction) { result ->
+                // Execute network request on IO thread
+                withContext(Dispatchers.IO) {
+                    langChainAgentEngine.execute(instruction) { result ->
                     viewModelScope.launch {
                         val message = when {
                             result.success && !result.isReply -> {
@@ -234,6 +238,7 @@ class ChatViewModel(
 
                 kotlinx.coroutines.delay(2000)
                 FloatingWindowService.getInstance()?.hide()
+                }
 
             } catch (e: Exception) {
                 logger.e("Execution error: ${e.message}", e)
