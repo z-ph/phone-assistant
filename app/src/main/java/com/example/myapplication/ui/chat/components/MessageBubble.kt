@@ -1,7 +1,11 @@
 package com.example.myapplication.ui.chat.components
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.Base64
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +60,7 @@ fun MessageBubble(
 
 @Composable
 private fun UserMessageBubble(message: ChatMessage.UserMessage, timestamp: String) {
+    val context = LocalContext.current
     Column(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -75,11 +81,31 @@ private fun UserMessageBubble(message: ChatMessage.UserMessage, timestamp: Strin
             shape = RoundedCornerShape(12.dp, 12.dp, 4.dp, 12.dp),
             color = MaterialTheme.colorScheme.primaryContainer
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = message.content,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.weight(1f)
                 )
+                IconButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("message", message.content)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.size(20.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "复制",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
 
@@ -93,6 +119,7 @@ private fun UserMessageBubble(message: ChatMessage.UserMessage, timestamp: Strin
 
 @Composable
 private fun AiMessageBubble(message: ChatMessage.AiMessage, timestamp: String) {
+    val context = LocalContext.current
     Column(
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -106,26 +133,51 @@ private fun AiMessageBubble(message: ChatMessage.AiMessage, timestamp: String) {
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(
-                        imageVector = if (message.isSuccess) Icons.Default.AutoAwesome else Icons.Default.Error,
-                        contentDescription = null,
-                        tint = if (message.isSuccess)
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        else
-                            MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = if (message.isSuccess) "AI Response" else "Error",
-                        fontWeight = FontWeight.Medium,
-                        color = if (message.isSuccess)
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        else
-                            MaterialTheme.colorScheme.onErrorContainer
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (message.isSuccess) Icons.Default.AutoAwesome else Icons.Default.Error,
+                            contentDescription = null,
+                            tint = if (message.isSuccess)
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            else
+                                MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = if (message.isSuccess) "AI Response" else "Error",
+                            fontWeight = FontWeight.Medium,
+                            color = if (message.isSuccess)
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            else
+                                MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("message", message.content)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "复制",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (message.isSuccess)
+                                MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                            else
+                                MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -159,6 +211,8 @@ private fun AiMessageBubble(message: ChatMessage.AiMessage, timestamp: String) {
 
 @Composable
 private fun ToolCallBubble(message: ChatMessage.ToolCallMessage, timestamp: String) {
+    val context = LocalContext.current
+    val toolCallText = "${message.toolName}: ${message.result ?: ""}"
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = if (message.isSuccess)
@@ -187,7 +241,7 @@ private fun ToolCallBubble(message: ChatMessage.ToolCallMessage, timestamp: Stri
                 modifier = Modifier.size(18.dp)
             )
 
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = message.toolName,
                     fontWeight = FontWeight.Medium,
@@ -207,6 +261,26 @@ private fun ToolCallBubble(message: ChatMessage.ToolCallMessage, timestamp: Stri
                             MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
                     )
                 }
+            }
+
+            IconButton(
+                onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("message", toolCallText)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "复制",
+                    modifier = Modifier.size(16.dp),
+                    tint = if (message.isSuccess)
+                        MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    else
+                        MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                )
             }
 
             Icon(

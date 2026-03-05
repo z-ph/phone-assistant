@@ -3,6 +3,7 @@ package com.example.myapplication.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -226,6 +227,8 @@ fun LogScreen(
 
 @Composable
 fun LogItem(log: LogEntry) {
+    val context = LocalContext.current
+    val logText = log.throwable?.let { "${log.message}\n${it}" } ?: log.message
     val backgroundColor = when (log.level) {
         LogLevel.ERROR -> MaterialTheme.colorScheme.errorContainer
         LogLevel.WARN -> MaterialTheme.colorScheme.tertiaryContainer
@@ -260,13 +263,14 @@ fun LogItem(log: LogEntry) {
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = backgroundColor)
     ) {
-        Column(
+        Row(
             modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -283,25 +287,41 @@ fun LogItem(log: LogEntry) {
                         style = MaterialTheme.typography.labelSmall,
                         color = contentColor
                     )
+                    Text(
+                        text = log.timestamp,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor.copy(alpha = 0.7f)
+                    )
                 }
                 Text(
-                    text = log.timestamp,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = contentColor.copy(alpha = 0.7f)
-                )
-            }
-            Text(
-                text = log.message,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-                color = contentColor
-            )
-            log.throwable?.let {
-                Text(
-                    text = it.take(500) + if (it.length > 500) "..." else "",
+                    text = log.message,
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.error
+                    color = contentColor
+                )
+                log.throwable?.let {
+                    Text(
+                        text = it.take(500) + if (it.length > 500) "..." else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            IconButton(
+                onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("log", logText)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "复制",
+                    modifier = Modifier.size(18.dp),
+                    tint = contentColor.copy(alpha = 0.7f)
                 )
             }
         }
