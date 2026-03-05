@@ -26,6 +26,24 @@ enum class ModelProvider(
         authHeaderFormat = "Bearer {token}"
     ),
 
+    DEEPSEEK(
+        id = "deepseek",
+        displayName = "DeepSeek",
+        defaultBaseUrl = "https://api.deepseek.com/v1",
+        defaultModel = "deepseek-chat",
+        endpointFormat = "/chat/completions",
+        authHeaderFormat = "Bearer {token}"
+    ),
+
+    QWEN(
+        id = "qwen",
+        displayName = "通义千问 (Qwen)",
+        defaultBaseUrl = "https://dashscope.aliyuncs.com/v1",
+        defaultModel = "qwen-plus",
+        endpointFormat = "/chat/completions",
+        authHeaderFormat = "Bearer {token}"
+    ),
+
     ANTHROPIC(
         id = "anthropic",
         displayName = "Anthropic (Claude)",
@@ -47,7 +65,7 @@ enum class ModelProvider(
     AZURE_OPENAI(
         id = "azure-openai",
         displayName = "Azure OpenAI",
-        defaultBaseUrl = "https://{resource}.openai.azure.com/openai/deployments/{deployment}",
+        defaultBaseUrl = "https://{location}.openai.azure.com/openai/deployments/{deployment}",
         defaultModel = "gpt-4o",
         endpointFormat = "/chat/completions?api-version=2024-02-15-preview",
         authHeaderFormat = "Bearer {token}"

@@ -38,7 +38,7 @@ import com.example.myapplication.MyApplication
 import com.example.myapplication.accessibility.AutoService
 import com.example.myapplication.screen.ScreenCapture
 import com.example.myapplication.shell.ShizukuHelper
-import com.example.myapplication.utils.ApiProviders
+import com.example.myapplication.config.ModelProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -338,7 +338,7 @@ fun PermissionScreen(
 
     // API Key Dialog - Cherry Studio Style
     if (showApiKeyDialog) {
-        val providers = ApiProviders.ALL
+        val providers = ModelProvider.getAllProviders()
         val selectedProvider = providers.find { it.id == selectedProviderId } ?: providers.first()
 
         AlertDialog(
@@ -406,7 +406,7 @@ fun PermissionScreen(
                                             .padding(12.dp)
                                     ) {
                                         Text(
-                                            text = provider.name,
+                                            text = provider.displayName,
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
                                             else MaterialTheme.colorScheme.onSurfaceVariant

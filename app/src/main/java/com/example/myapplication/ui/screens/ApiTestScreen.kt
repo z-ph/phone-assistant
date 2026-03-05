@@ -18,8 +18,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.MyApplication
 import com.example.myapplication.api.ZhipuApiClient
-import com.example.myapplication.utils.ApiProvider
-import com.example.myapplication.utils.ApiProviders
+import com.example.myapplication.config.ModelProvider
 import com.example.myapplication.utils.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -77,10 +76,10 @@ fun ApiTestScreen(
                 selectedProvider = selectedProvider,
                 onProviderSelected = { provider ->
                     selectedProvider = provider
-                    if (baseUrl.isEmpty() || ApiProviders.ALL.any { it.defaultBaseUrl == baseUrl }) {
+                    if (baseUrl.isEmpty() || ModelProvider.getAllProviders().any { it.defaultBaseUrl == baseUrl }) {
                         baseUrl = provider.defaultBaseUrl
                     }
-                    if (modelId.isEmpty() || ApiProviders.ALL.any { it.defaultModel == modelId }) {
+                    if (modelId.isEmpty() || ModelProvider.getAllProviders().any { it.defaultModel == modelId }) {
                         modelId = provider.defaultModel
                     }
                 }
@@ -189,8 +188,8 @@ fun ConfigurationGuideCard() {
 
 @Composable
 fun ProviderSelectionCard(
-    selectedProvider: ApiProvider,
-    onProviderSelected: (ApiProvider) -> Unit
+    selectedProvider: ModelProvider,
+    onProviderSelected: (ModelProvider) -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -198,12 +197,12 @@ fun ProviderSelectionCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "选择API提供商",
+                text = "选择 API 提供商",
                 style = MaterialTheme.typography.titleMedium
             )
 
             Column(modifier = Modifier.selectableGroup()) {
-                ApiProviders.ALL.forEach { provider ->
+                ModelProvider.getAllProviders().forEach { provider ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -222,12 +221,12 @@ fun ProviderSelectionCard(
                         Spacer(Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = provider.name,
+                                text = provider.displayName,
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             if (provider.id != "custom") {
                                 Text(
-                                    text = "默认模型: ${provider.defaultModel}",
+                                    text = "默认模型：${provider.defaultModel}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -249,7 +248,7 @@ fun ApiConfigurationCard(
     onBaseUrlChange: (String) -> Unit,
     modelId: String,
     onModelIdChange: (String) -> Unit,
-    provider: ApiProvider
+    provider: ModelProvider
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -311,7 +310,7 @@ fun ApiConfigurationCard(
             )
             SelectionContainer {
                 Text(
-                    text = provider.getFullUrl(baseUrl.ifEmpty { provider.defaultBaseUrl }),
+                    text = provider.buildApiUrl(baseUrl.ifEmpty { provider.defaultBaseUrl }),
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -483,7 +482,7 @@ data class TestResult(
 )
 
 suspend fun testApiConnection(
-    provider: ApiProvider,
+    provider: ModelProvider,
     apiKey: String,
     baseUrl: String,
     modelId: String
@@ -492,7 +491,7 @@ suspend fun testApiConnection(
     val gson = Gson()
 
     try {
-        val fullUrl = provider.getFullUrl(baseUrl)
+        val fullUrl = provider.buildApiUrl(baseUrl)
         logger.d("Testing API: $fullUrl with model: $modelId")
 
         val client = OkHttpClient.Builder()

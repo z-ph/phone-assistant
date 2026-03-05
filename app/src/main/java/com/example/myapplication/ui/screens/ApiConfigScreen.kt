@@ -24,9 +24,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.api.ModelInfo
+import com.example.myapplication.config.ModelProvider
 import com.example.myapplication.data.local.entities.ApiConfigEntity
-import com.example.myapplication.utils.ApiProvider
-import com.example.myapplication.utils.ApiProviders
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -229,7 +228,7 @@ fun ApiConfigCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val provider = ApiProviders.getById(config.providerId)
+    val provider = ModelProvider.fromId(config.providerId)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -308,10 +307,10 @@ fun ApiConfigCard(
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
-                    text = provider.name,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                                Text(
+                                    text = provider.displayName,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
             }
 
             Row(
@@ -384,9 +383,9 @@ fun ApiConfigEditDialog(
     isTesting: Boolean,
     testResult: TestConnectionResult?,
     onDismiss: () -> Unit,
-    onSave: (String, ApiProvider, String, String, String) -> Unit,
-    onFetchModels: (ApiProvider, String, String) -> Unit,
-    onTestConnection: (ApiProvider, String, String, String) -> Unit,
+    onSave: (String, ModelProvider, String, String, String) -> Unit,
+    onFetchModels: (ModelProvider, String, String) -> Unit,
+    onTestConnection: (ModelProvider, String, String, String) -> Unit,
     onClearTestResult: () -> Unit
 ) {
     val isEditing = editingConfig != null
@@ -394,7 +393,7 @@ fun ApiConfigEditDialog(
     // Form state
     var name by remember { mutableStateOf(editingConfig?.name ?: "") }
     var selectedProvider by remember { mutableStateOf(
-        editingConfig?.providerId?.let { ApiProviders.getById(it) } ?: ApiProviders.ZHIPU
+        editingConfig?.providerId?.let { ModelProvider.fromId(it) } ?: ModelProvider.ZHIPU
     )}
     var apiKey by remember { mutableStateOf(editingConfig?.apiKey ?: "") }
     var baseUrl by remember { mutableStateOf(editingConfig?.baseUrl ?: "") }
@@ -434,15 +433,15 @@ fun ApiConfigEditDialog(
                 )
 
                 Column(modifier = Modifier.selectableGroup()) {
-                    ApiProviders.ALL.forEach { provider ->
+                    ModelProvider.getAllProviders().forEach { provider ->
                         val onProviderSelected = {
                             selectedProvider = provider
                             if (provider.id == "custom") {
                                 baseUrl = ""
-                            } else if (baseUrl.isEmpty() || ApiProviders.ALL.any { it.defaultBaseUrl == baseUrl }) {
+                            } else if (baseUrl.isEmpty() || ModelProvider.getAllProviders().any { it.defaultBaseUrl == baseUrl }) {
                                 baseUrl = provider.defaultBaseUrl
                             }
-                            if (modelId.isEmpty() || ApiProviders.ALL.any { it.defaultModel == modelId }) {
+                            if (modelId.isEmpty() || ModelProvider.getAllProviders().any { it.defaultModel == modelId }) {
                                 modelId = provider.defaultModel
                             }
                         }

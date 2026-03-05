@@ -4,8 +4,7 @@ import android.content.Context
 import com.example.myapplication.api.model.*
 import com.example.myapplication.config.AppConfig.Timeouts as TimeoutConfig
 import com.example.myapplication.data.local.entities.ApiConfigEntity
-import com.example.myapplication.utils.ApiProvider
-import com.example.myapplication.utils.ApiProviders
+import com.example.myapplication.config.ModelProvider
 import com.example.myapplication.utils.Logger
 import com.example.myapplication.utils.PreferencesManager
 import com.google.gson.Gson
@@ -80,12 +79,12 @@ class ZhipuApiClient(context: Context) {
         }
 
     // Current provider
-    val currentProvider: ApiProvider
+    val currentProvider: ModelProvider
         get() = prefs.getCurrentProvider()
 
     // Full API URL (computed from base URL + provider endpoint format)
     val apiUrl: String
-        get() = currentProvider.getFullUrl(baseUrl)
+        get() = currentProvider.buildApiUrl(baseUrl)
 
     // For backward compatibility - getter returns apiUrl, setter parses and saves
     var apiUrlLegacy: String
@@ -111,7 +110,7 @@ class ZhipuApiClient(context: Context) {
     fun isConfigured(): Boolean = apiKey.isNotBlank()
 
     // Save configuration (unified entry point)
-    fun saveConfig(provider: ApiProvider, key: String, url: String, model: String) {
+    fun saveConfig(provider: ModelProvider, key: String, url: String, model: String) {
         prefs.providerId = provider.id
         prefs.apiKey = key
         prefs.baseUrl = url

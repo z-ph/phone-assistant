@@ -1,7 +1,6 @@
 package com.example.myapplication.api
 
-import com.example.myapplication.utils.ApiProvider
-import com.example.myapplication.utils.ApiProviders
+import com.example.myapplication.config.ModelProvider
 import com.example.myapplication.utils.Logger
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -45,7 +44,7 @@ class ModelFetcher {
      * Fetch models from a provider
      */
     suspend fun fetchModels(
-        provider: ApiProvider,
+        provider: ModelProvider,
         apiKey: String,
         baseUrl: String
     ): ModelFetchResult = withContext(Dispatchers.IO) {
@@ -53,15 +52,15 @@ class ModelFetcher {
             val actualBaseUrl = baseUrl.ifEmpty { provider.defaultBaseUrl }
 
             when (provider.id) {
-                ApiProviders.ZHIPU.id -> fetchZhipuModels(actualBaseUrl, apiKey)
-                ApiProviders.QWEN.id -> fetchQwenModels(actualBaseUrl, apiKey)
+                ModelProvider.ZHIPU.id -> fetchZhipuModels(actualBaseUrl, apiKey)
+                ModelProvider.QWEN.id -> fetchQwenModels(actualBaseUrl, apiKey)
                 else -> fetchOpenAICompatibleModels(actualBaseUrl, apiKey)
             }
         } catch (e: Exception) {
             logger.e("Failed to fetch models: ${e.message}", e)
             ModelFetchResult(
                 isSuccess = false,
-                error = "获取模型列表失败: ${e.message}"
+                error = "获取模型列表失败：${e.message}"
             )
         }
     }

@@ -24,11 +24,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.accessibility.AutoService
 import com.example.myapplication.api.ZhipuApiClient
+import com.example.myapplication.config.ModelProvider
 import com.example.myapplication.engine.TaskEngine
 import com.example.myapplication.engine.TaskStatus
 import com.example.myapplication.screen.ScreenCapture
-import com.example.myapplication.utils.ApiProvider
-import com.example.myapplication.utils.ApiProviders
 import com.example.myapplication.utils.Logger
 import kotlinx.coroutines.delay
 

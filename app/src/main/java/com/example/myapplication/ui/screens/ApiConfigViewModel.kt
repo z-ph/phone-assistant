@@ -8,11 +8,10 @@ import com.example.myapplication.api.ModelFetcher
 import com.example.myapplication.api.ModelFetchResult
 import com.example.myapplication.api.ModelInfo
 import com.example.myapplication.api.ZhipuApiClient
+import com.example.myapplication.config.ModelProvider
 import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.dao.ApiConfigDao
 import com.example.myapplication.data.local.entities.ApiConfigEntity
-import com.example.myapplication.utils.ApiProvider
-import com.example.myapplication.utils.ApiProviders
 import com.example.myapplication.utils.PreferencesManager
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -82,7 +81,7 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun createConfig(
         name: String,
-        provider: ApiProvider,
+        provider: ModelProvider,
         apiKey: String,
         baseUrl: String,
         modelId: String
@@ -93,7 +92,7 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
 
             val config = ApiConfigEntity(
                 id = UUID.randomUUID().toString(),
-                name = name.ifEmpty { provider.name },
+                name = name.ifEmpty { provider.displayName },
                 providerId = provider.id,
                 apiKey = apiKey,
                 baseUrl = baseUrl,
@@ -113,7 +112,7 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateConfig(
         configId: String,
         name: String,
-        provider: ApiProvider,
+        provider: ModelProvider,
         apiKey: String,
         baseUrl: String,
         modelId: String
@@ -170,7 +169,7 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Fetch available models from the API
      */
-    fun fetchModels(provider: ApiProvider, apiKey: String, baseUrl: String) {
+    fun fetchModels(provider: ModelProvider, apiKey: String, baseUrl: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingModels = true) }
 
@@ -194,7 +193,7 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
      * Test API connection
      */
     fun testConnection(
-        provider: ApiProvider,
+        provider: ModelProvider,
         apiKey: String,
         baseUrl: String,
         modelId: String

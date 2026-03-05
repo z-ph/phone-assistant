@@ -82,7 +82,7 @@ class LangChainAgentEngine(private val context: Context) {
                 .build()
 
             "openai" -> OpenAiChatModel.builder()
-                .baseUrl(config.baseUrl)
+                .baseUrl(config.baseUrl.trimEnd('/'))
                 .apiKey(config.apiKey)
                 .modelName(config.modelId)
                 .build()
@@ -93,12 +93,12 @@ class LangChainAgentEngine(private val context: Context) {
                 .build()
 
             "ollama" -> OllamaChatModel.builder()
-                .baseUrl(config.baseUrl)
+                .baseUrl(config.baseUrl.trimEnd('/'))
                 .modelName(config.modelId)
                 .build()
 
             "custom" -> OpenAiChatModel.builder()
-                .baseUrl(config.baseUrl)
+                .baseUrl(config.baseUrl.trimEnd('/'))
                 .apiKey(config.apiKey)
                 .modelName(config.modelId)
                 .build()
