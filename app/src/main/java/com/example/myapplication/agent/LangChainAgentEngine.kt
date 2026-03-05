@@ -3,7 +3,7 @@ package com.example.myapplication.agent
 import android.content.Context
 import com.example.myapplication.agent.langchain.ModelFactory
 import com.example.myapplication.data.local.AppDatabase
-import com.example.myapplication.data.local.entities.ApiConfigEntity
+import com.example.myapplication.data.mapper.ApiConfigMapper.toProviderConfig
 import com.example.myapplication.utils.Logger
 import dev.langchain4j.memory.chat.MessageWindowChatMemory
 import dev.langchain4j.service.AiServices
@@ -203,14 +203,4 @@ class LangChainAgentEngine(private val context: Context) {
         """)
         fun chat(userMessage: String): String
     }
-}
-
-// Extension function to convert ApiConfigEntity to ModelFactory.ProviderConfig
-private fun ApiConfigEntity.toProviderConfig(): com.example.myapplication.agent.langchain.ProviderConfig {
-    return com.example.myapplication.agent.langchain.ProviderConfig(
-        providerId = providerId,
-        apiKey = apiKey,
-        baseUrl = baseUrl,
-        modelId = modelId
-    )
 }
