@@ -1,15 +1,11 @@
 package com.example.myapplication.agent
 
 import android.content.Context
-import com.example.myapplication.config.ApiConfigManager
-import com.example.myapplication.config.ModelProvider
+import com.example.myapplication.agent.langchain.ModelFactory
+import com.example.myapplication.data.local.AppDatabase
+import com.example.myapplication.data.local.entities.ApiConfigEntity
 import com.example.myapplication.utils.Logger
 import dev.langchain4j.memory.chat.MessageWindowChatMemory
-import dev.langchain4j.model.anthropic.AnthropicChatModel
-import dev.langchain4j.model.chat.ChatLanguageModel
-import dev.langchain4j.model.ollama.OllamaChatModel
-import dev.langchain4j.model.openai.OpenAiChatModel
-import dev.langchain4j.model.zhipu.ZhipuAiChatModel
 import dev.langchain4j.service.AiServices
 import dev.langchain4j.service.SystemMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,34 +19,40 @@ class LangChainAgentEngine(private val context: Context) {
         private const val MAX_MESSAGES = 20
         
         @Volatile private var instance: LangChainAgentEngine? = null
+        @Volatile private var chuckerInterceptor: okhttp3.Interceptor? = null
 
         fun getInstance(context: Context): LangChainAgentEngine {
             return instance ?: synchronized(this) {
                 instance ?: LangChainAgentEngine(context.applicationContext).also { instance = it }
             }
         }
+
+        fun setChuckerInterceptor(interceptor: okhttp3.Interceptor) {
+            chuckerInterceptor = interceptor
+        }
     }
 
     private val logger = Logger(TAG)
-    private val configManager = ApiConfigManager(context)
+    private val apiConfigDao = AppDatabase.getDatabase(context).apiConfigDao()
 
     private val _state = MutableStateFlow(AgentState())
     val state: StateFlow<AgentState> = _state.asStateFlow()
 
     private var assistant: Assistant? = null
 
-    private var currentConfig: ApiConfigManager.ProviderConfig? = null
-
     fun initialize(): Result<Unit> {
         return try {
-            val config = configManager.getCurrentProviderConfig()
-            if (config == null) {
+            val configEntity = runCatching { 
+                kotlinx.coroutines.runBlocking { 
+                    apiConfigDao.getActiveConfig() 
+                } 
+            }.getOrNull()
+            
+            if (configEntity == null) {
                 return Result.failure(Exception("未配置 API，请先在设置中配置"))
             }
 
-            currentConfig = config
-
-            val chatModel = createChatModel(config)
+            val chatModel = ModelFactory.createChatModel(configEntity.toProviderConfig())
 
             val tools = AndroidTools(context.applicationContext)
 
@@ -63,47 +65,12 @@ class LangChainAgentEngine(private val context: Context) {
                 .build()
 
             _state.value = AgentState(state = AgentStateType.READY)
-            logger.d("Agent 初始化成功：provider=${config.providerId}, model=${config.modelId}")
+            logger.d("Agent 初始化成功：provider=${configEntity.providerId}, model=${configEntity.modelId}")
             Result.success(Unit)
         } catch (e: Exception) {
             logger.e("Agent 初始化失败：${e.message}", e)
             _state.value = AgentState(state = AgentStateType.ERROR, error = e.message)
             Result.failure(e)
-        }
-    }
-
-    private fun createChatModel(config: ApiConfigManager.ProviderConfig): ChatLanguageModel {
-        val provider = ModelProvider.fromId(config.providerId)
-
-        return when (provider.id) {
-            "zhipu" -> ZhipuAiChatModel.builder()
-                .apiKey(config.apiKey)
-                .model(config.modelId)
-                .build()
-
-            "openai" -> OpenAiChatModel.builder()
-                .baseUrl(config.baseUrl.trimEnd('/'))
-                .apiKey(config.apiKey)
-                .modelName(config.modelId)
-                .build()
-
-            "anthropic" -> AnthropicChatModel.builder()
-                .apiKey(config.apiKey)
-                .modelName(config.modelId)
-                .build()
-
-            "ollama" -> OllamaChatModel.builder()
-                .baseUrl(config.baseUrl.trimEnd('/'))
-                .modelName(config.modelId)
-                .build()
-
-            "custom" -> OpenAiChatModel.builder()
-                .baseUrl(config.baseUrl.trimEnd('/'))
-                .apiKey(config.apiKey)
-                .modelName(config.modelId)
-                .build()
-
-            else -> throw IllegalStateException("不支持的提供商：${provider.id}")
         }
     }
 
@@ -236,4 +203,14 @@ class LangChainAgentEngine(private val context: Context) {
         """)
         fun chat(userMessage: String): String
     }
+}
+
+// Extension function to convert ApiConfigEntity to ModelFactory.ProviderConfig
+private fun ApiConfigEntity.toProviderConfig(): com.example.myapplication.agent.langchain.ProviderConfig {
+    return com.example.myapplication.agent.langchain.ProviderConfig(
+        providerId = providerId,
+        apiKey = apiKey,
+        baseUrl = baseUrl,
+        modelId = modelId
+    )
 }

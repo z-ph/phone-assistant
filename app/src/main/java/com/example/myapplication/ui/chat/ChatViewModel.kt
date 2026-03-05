@@ -2,14 +2,14 @@ package com.example.myapplication.ui.chat
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.MyApplication
-import com.example.myapplication.agent.*
+import com.example.myapplication.agent.LangChainAgentEngine
+import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.model.ChatMessage
 import com.example.myapplication.data.model.ChatSession
 import com.example.myapplication.data.repository.ChatRepository
-import com.example.myapplication.engine.ReadinessStatus
-import com.example.myapplication.engine.TaskEngine
 import com.example.myapplication.ui.overlay.FloatingWindowService
 import com.example.myapplication.utils.Logger
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -19,16 +19,20 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 private const val TAG = "ChatViewModel"
+private const val KEY_CURRENT_SESSION_ID = "current_session_id"
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class ChatViewModel(application: Application) : AndroidViewModel(application) {
+class ChatViewModel(
+    application: Application,
+    private val savedStateHandle: SavedStateHandle
+) : AndroidViewModel(application) {
 
-    private val repository = ChatRepository.getInstance(application)
+    private val database = AppDatabase.getDatabase(application)
+    private val repository = ChatRepository.getInstance(database)
     private val app = application as MyApplication
     private val logger = Logger(TAG)
 
     private val langChainAgentEngine = app.langChainAgentEngine
-    private val taskEngine = app.taskEngine
 
     // UI State
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -38,7 +42,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val sessions = repository.getAllSessions()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    private val _currentSessionId = MutableStateFlow<String?>(null)
+    private val _currentSessionId = MutableStateFlow<String?>(
+        savedStateHandle.get<String>(KEY_CURRENT_SESSION_ID)
+    )
     val currentSessionId: StateFlow<String?> = _currentSessionId
 
     val currentMessages: StateFlow<List<ChatMessage>> = _currentSessionId
@@ -96,12 +102,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             langChainAgentEngine.clearMemory()
             val session = repository.createSession(title)
             _currentSessionId.value = session.id
+            savedStateHandle[KEY_CURRENT_SESSION_ID] = session.id
         }
     }
 
     fun selectSession(sessionId: String) {
         langChainAgentEngine.clearMemory()
         _currentSessionId.value = sessionId
+        savedStateHandle[KEY_CURRENT_SESSION_ID] = sessionId
     }
 
     fun deleteSession(sessionId: String) {
@@ -110,6 +118,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (_currentSessionId.value == sessionId) {
                 val latestSession = repository.getLatestSession()
                 _currentSessionId.value = latestSession?.id
+                savedStateHandle[KEY_CURRENT_SESSION_ID] = latestSession?.id
                 if (latestSession == null) createNewSession()
             }
         }
@@ -264,8 +273,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val sessionId = _currentSessionId.value ?: return
         viewModelScope.launch { repository.clearSessionMessages(sessionId) }
     }
-
-    fun getReadinessStatus(): ReadinessStatus = taskEngine.getReadinessStatus()
 
     override fun onCleared() {
         super.onCleared()

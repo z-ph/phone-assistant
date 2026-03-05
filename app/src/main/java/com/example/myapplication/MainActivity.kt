@@ -48,8 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.accessibility.AutoService
-import com.example.myapplication.api.ZhipuApiClient
-import com.example.myapplication.engine.TaskEngine
+import com.example.myapplication.agent.LangChainAgentEngine
 import com.example.myapplication.screen.ScreenCapture
 import com.example.myapplication.ui.chat.ChatScreen
 import com.example.myapplication.ui.screens.ApiConfigScreen
@@ -58,31 +57,18 @@ import com.example.myapplication.ui.screens.DebugTestScreen
 import com.example.myapplication.ui.screens.LogScreen
 import com.example.myapplication.ui.screens.MainScreen
 import com.example.myapplication.ui.screens.PermissionScreen
-import com.example.myapplication.ui.screens.SystemPromptScreen
 import com.example.myapplication.ui.screens.TypeToolTestScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var taskEngine: TaskEngine
-    private lateinit var apiClient: ZhipuApiClient
-
-    // Permission state
-    private var hasAllPermissions by mutableStateOf(false)
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Get singletons from Application
-        taskEngine = (application as MyApplication).taskEngine
-        apiClient = (application as MyApplication).zhipuApiClient
-
         setContent {
             MyApplicationTheme {
                 MainApp(
-                    taskEngine = taskEngine,
-                    apiClient = apiClient,
                     hasAllPermissions = hasAllPermissions,
                     onPermissionsGranted = { hasAllPermissions = true }
                 )
@@ -98,29 +84,29 @@ class MainActivity : ComponentActivity() {
         checkPermissions()
     }
 
+    private var hasAllPermissions by mutableStateOf(false)
+
     private fun checkPermissions() {
         val screenCaptureReady = ScreenCapture.isProjectionActive()
-        val apiReady = apiClient.isConfigured()
         val overlayReady = android.provider.Settings.canDrawOverlays(this)
         val appListReady = try {
             packageManager.queryIntentActivities(android.content.Intent(android.content.Intent.ACTION_MAIN), 0).isNotEmpty()
         } catch (e: Exception) {
             false
         }
-        hasAllPermissions = AutoService.isEnabled() && screenCaptureReady && apiReady && overlayReady && appListReady
+        hasAllPermissions = AutoService.isEnabled() && screenCaptureReady && overlayReady && appListReady
     }
 }
 
 @Composable
 fun MainApp(
-    taskEngine: TaskEngine,
-    apiClient: ZhipuApiClient,
     hasAllPermissions: Boolean,
     onPermissionsGranted: () -> Unit
 ) {
     var currentDestination by remember { mutableStateOf(AppDestinations.CHAT) }
     var profileSubPage by remember { mutableStateOf(ProfileSubPage.MAIN) }
     val context = LocalContext.current
+    val langChainAgentEngine = MyApplication.getLangChainAgentEngine()
 
     // Screen capture launcher
     val screenCaptureLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -137,6 +123,10 @@ fun MainApp(
             onAllPermissionsGranted = {
                 onPermissionsGranted()
                 currentDestination = AppDestinations.CHAT
+            },
+            onNavigateToApiConfig = {
+                currentDestination = AppDestinations.PROFILE
+                profileSubPage = ProfileSubPage.API_CONFIG
             }
         )
     } else {
@@ -171,10 +161,6 @@ fun MainApp(
                         onOpenSettings = {
                             currentDestination = AppDestinations.PROFILE
                             profileSubPage = ProfileSubPage.SETTINGS
-                        },
-                        onOpenPromptEditor = {
-                            currentDestination = AppDestinations.PROFILE
-                            profileSubPage = ProfileSubPage.PROMPT
                         }
                     )
                 }
@@ -190,7 +176,6 @@ fun MainApp(
                                 modifier = Modifier.padding(paddingValues),
                                 onNavigateToSettings = { profileSubPage = ProfileSubPage.SETTINGS },
                                 onNavigateToApiConfig = { profileSubPage = ProfileSubPage.API_CONFIG },
-                                onNavigateToPrompt = { profileSubPage = ProfileSubPage.PROMPT },
                                 onNavigateToApiTest = { profileSubPage = ProfileSubPage.API_TEST },
                                 onNavigateToDebugTest = { profileSubPage = ProfileSubPage.DEBUG_TEST },
                                 onNavigateToTypeToolTest = { profileSubPage = ProfileSubPage.TYPE_TOOL_TEST }
@@ -198,8 +183,7 @@ fun MainApp(
                         }
                         ProfileSubPage.SETTINGS -> {
                             MainScreen(
-                                taskEngine = taskEngine,
-                                apiClient = apiClient,
+                                langChainAgentEngine = langChainAgentEngine,
                                 onNavigateToApiConfig = { profileSubPage = ProfileSubPage.API_CONFIG },
                                 onNavigateBack = { profileSubPage = ProfileSubPage.MAIN },
                                 modifier = Modifier.padding(paddingValues)
@@ -207,12 +191,6 @@ fun MainApp(
                         }
                         ProfileSubPage.API_CONFIG -> {
                             ApiConfigScreen(
-                                onNavigateBack = { profileSubPage = ProfileSubPage.MAIN },
-                                modifier = Modifier.padding(paddingValues)
-                            )
-                        }
-                        ProfileSubPage.PROMPT -> {
-                            SystemPromptScreen(
                                 onNavigateBack = { profileSubPage = ProfileSubPage.MAIN },
                                 modifier = Modifier.padding(paddingValues)
                             )
@@ -252,7 +230,6 @@ enum class ProfileSubPage {
     MAIN,
     SETTINGS,
     API_CONFIG,
-    PROMPT,
     API_TEST,
     DEBUG_TEST,
     TYPE_TOOL_TEST
@@ -263,14 +240,15 @@ fun ProfileScreen(
     modifier: Modifier = Modifier,
     onNavigateToSettings: () -> Unit = {},
     onNavigateToApiConfig: () -> Unit = {},
-    onNavigateToPrompt: () -> Unit = {},
     onNavigateToApiTest: () -> Unit = {},
     onNavigateToDebugTest: () -> Unit = {},
     onNavigateToTypeToolTest: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val taskEngine = MyApplication.getTaskEngine()
-    val readinessStatus by remember { derivedStateOf { taskEngine.getReadinessStatus() } }
+    val langChainAgentEngine = MyApplication.getLangChainAgentEngine()
+    val agentState by langChainAgentEngine.state.collectAsState()
+    val isReady = agentState.state == LangChainAgentEngine.AgentStateType.READY || 
+                  agentState.state == LangChainAgentEngine.AgentStateType.IDLE
 
     Column(
         modifier = modifier
@@ -296,18 +274,18 @@ fun ProfileScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text(text = "Accessibility Service")
+                        Text(text = "无障碍服务")
                         Text(
-                            text = if (readinessStatus.accessibilityServiceEnabled) "Enabled" else "Disabled",
+                            text = if (AutoService.isEnabled()) "已启用" else "未启用",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (readinessStatus.accessibilityServiceEnabled)
+                            color = if (AutoService.isEnabled())
                                 MaterialTheme.colorScheme.primary
                             else
                                 MaterialTheme.colorScheme.error
                         )
                     }
                     Switch(
-                        checked = readinessStatus.accessibilityServiceEnabled,
+                        checked = AutoService.isEnabled(),
                         onCheckedChange = {
                             val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                             context.startActivity(intent)
@@ -323,20 +301,20 @@ fun ProfileScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text(text = "Screen Capture")
+                        Text(text = "屏幕捕获")
                         Text(
-                            text = if (readinessStatus.screenCaptureActive) "Active" else "Inactive",
+                            text = if (ScreenCapture.isProjectionActive()) "已激活" else "未激活",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (readinessStatus.screenCaptureActive)
+                            color = if (ScreenCapture.isProjectionActive())
                                 MaterialTheme.colorScheme.primary
                             else
                                 MaterialTheme.colorScheme.error
                         )
                     }
                     Icon(
-                        imageVector = if (readinessStatus.screenCaptureActive) Icons.Default.Check else Icons.Default.Close,
+                        imageVector = if (ScreenCapture.isProjectionActive()) Icons.Default.Check else Icons.Default.Close,
                         contentDescription = null,
-                        tint = if (readinessStatus.screenCaptureActive)
+                        tint = if (ScreenCapture.isProjectionActive())
                             MaterialTheme.colorScheme.primary
                         else
                             MaterialTheme.colorScheme.error
@@ -351,20 +329,27 @@ fun ProfileScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text(text = "API Key")
+                        Text(text = "Agent 状态")
                         Text(
-                            text = if (readinessStatus.apiKeyConfigured) "Configured" else "Not configured",
+                            text = when (agentState.state) {
+                                LangChainAgentEngine.AgentStateType.READY -> "已就绪"
+                                LangChainAgentEngine.AgentStateType.ERROR -> "错误：${agentState.error}"
+                                LangChainAgentEngine.AgentStateType.RUNNING -> "运行中"
+                                else -> agentState.state.name
+                            },
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (readinessStatus.apiKeyConfigured)
+                            color = if (agentState.state == LangChainAgentEngine.AgentStateType.READY)
                                 MaterialTheme.colorScheme.primary
-                            else
+                            else if (agentState.state == LangChainAgentEngine.AgentStateType.ERROR)
                                 MaterialTheme.colorScheme.error
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Icon(
-                        imageVector = if (readinessStatus.apiKeyConfigured) Icons.Default.Check else Icons.Default.Close,
+                        imageVector = if (isReady) Icons.Default.Check else Icons.Default.Close,
                         contentDescription = null,
-                        tint = if (readinessStatus.apiKeyConfigured)
+                        tint = if (isReady)
                             MaterialTheme.colorScheme.primary
                         else
                             MaterialTheme.colorScheme.error
@@ -397,13 +382,6 @@ fun ProfileScreen(
                     title = "API 配置管理",
                     subtitle = "管理多个API提供商",
                     onClick = onNavigateToApiConfig
-                )
-
-                MenuItem(
-                    icon = Icons.Default.EditNote,
-                    title = "系统提示词",
-                    subtitle = "编辑AI系统提示词",
-                    onClick = onNavigateToPrompt
                 )
 
                 MenuItem(
@@ -453,13 +431,6 @@ fun ProfileScreen(
                     title = "API 配置管理",
                     subtitle = "管理多个API提供商",
                     onClick = onNavigateToApiConfig
-                )
-
-                MenuItem(
-                    icon = Icons.Default.EditNote,
-                    title = "系统提示词",
-                    subtitle = "编辑AI系统提示词",
-                    onClick = onNavigateToPrompt
                 )
 
                 MenuItem(

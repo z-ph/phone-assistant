@@ -28,17 +28,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.myapplication.MyApplication
 import com.example.myapplication.accessibility.AutoService
+import com.example.myapplication.agent.LangChainAgentEngine
 import com.example.myapplication.screen.ScreenCapture
 import com.example.myapplication.shell.ShizukuHelper
-import com.example.myapplication.config.ModelProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,12 +50,9 @@ fun checkOverlayPermission(context: android.content.Context): Boolean {
 
 // Helper function to check app list permission (QUERY_ALL_PACKAGES)
 fun checkAppListPermission(context: android.content.Context): Boolean {
-    // QUERY_ALL_PACKAGES is a normal permission, granted at install time
-    // We just need to check if the package manager can query packages
     val pm = context.packageManager
     return try {
-        // If we can query intents, the permission is granted
-        pm.queryIntentActivities(android.content.Intent(android.content.Intent.ACTION_MAIN), 0).isNotEmpty()
+        pm.queryIntentActivities(Intent(Intent.ACTION_MAIN), 0).isNotEmpty()
     } catch (e: Exception) {
         false
     }
@@ -67,14 +62,16 @@ fun checkAppListPermission(context: android.content.Context): Boolean {
 @Composable
 fun PermissionScreen(
     onAllPermissionsGranted: () -> Unit,
+    onNavigateToApiConfig: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Get API client
-    val apiClient = MyApplication.getZhipuApiClient()
+    // Get LangChain Agent Engine
+    val langChainAgentEngine = MyApplication.getLangChainAgentEngine()
+    val agentState by langChainAgentEngine.state.collectAsState()
 
     // Helper function to check notification permission
     fun checkNotificationPermission(): Boolean {
@@ -84,7 +81,7 @@ fun PermissionScreen(
                 android.Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
         } else {
-            true // Pre-Android 13, notifications are enabled by default
+            true
         }
     }
 
@@ -92,7 +89,9 @@ fun PermissionScreen(
     var accessibilityGranted by remember { mutableStateOf(AutoService.isEnabled()) }
     var screenCaptureGranted by remember { mutableStateOf(ScreenCapture.isProjectionActive()) }
     var notificationGranted by remember { mutableStateOf(checkNotificationPermission()) }
-    var apiKeyConfigured by remember { mutableStateOf(apiClient.isConfigured()) }
+    var apiKeyConfigured by remember { 
+        mutableStateOf(agentState.state == LangChainAgentEngine.AgentStateType.READY) 
+    }
     var shizukuGranted by remember { mutableStateOf(ShizukuHelper.isReady()) }
     var overlayGranted by remember { mutableStateOf(checkOverlayPermission(context)) }
     var appListGranted by remember { mutableStateOf(checkAppListPermission(context)) }
@@ -102,11 +101,11 @@ fun PermissionScreen(
         accessibilityGranted = AutoService.isEnabled()
         screenCaptureGranted = ScreenCapture.isProjectionActive()
         notificationGranted = checkNotificationPermission()
-        apiKeyConfigured = apiClient.isConfigured()
+        apiKeyConfigured = agentState.state == LangChainAgentEngine.AgentStateType.READY
         shizukuGranted = ShizukuHelper.isReady()
         overlayGranted = checkOverlayPermission(context)
         appListGranted = checkAppListPermission(context)
-        Log.d(TAG, "States refreshed: accessibility=$accessibilityGranted, screenCapture=$screenCaptureGranted, notification=$notificationGranted, apiKey=$apiKeyConfigured, shizuku=$shizukuGranted, overlay=$overlayGranted, appList=$appListGranted")
+        Log.d(TAG, "States refreshed: accessibility=$accessibilityGranted, screenCapture=$screenCaptureGranted, apiKey=$apiKeyConfigured")
     }
 
     // Refresh on lifecycle resume
@@ -122,16 +121,9 @@ fun PermissionScreen(
         }
     }
 
-    // API Key dialog state
-    var showApiKeyDialog by remember { mutableStateOf(false) }
-    var selectedProviderId by remember { mutableStateOf(apiClient.providerId.ifEmpty { "zhipu" }) }
-    var apiKeyInput by remember { mutableStateOf("") }
-    var baseUrlInput by remember { mutableStateOf("") }
-    var modelIdInput by remember { mutableStateOf("") }
-    var showApiKey by remember { mutableStateOf(false) }
-
     // Check if all permissions are granted
-    val allGranted = accessibilityGranted && screenCaptureGranted && apiKeyConfigured && overlayGranted && appListGranted
+    val allGranted = accessibilityGranted && screenCaptureGranted && apiKeyConfigured && 
+                     overlayGranted && appListGranted
 
     // Update callback when all permissions are granted
     LaunchedEffect(allGranted) {
@@ -147,7 +139,7 @@ fun PermissionScreen(
         notificationGranted = granted
     }
 
-    // Screen capture launcher - actually start the capture
+    // Screen capture launcher
     val screenCaptureLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -190,7 +182,7 @@ fun PermissionScreen(
             PermissionCard(
                 icon = Icons.Default.Accessibility,
                 title = "无障碍服务",
-                description = "用于自动化UI操作，如点击、滑动和文本输入",
+                description = "用于自动化 UI 操作，如点击、滑动和文本输入",
                 granted = accessibilityGranted,
                 onGrant = {
                     val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
@@ -201,7 +193,7 @@ fun PermissionScreen(
             PermissionCard(
                 icon = Icons.Default.PhotoCamera,
                 title = "屏幕录制",
-                description = "用于捕获屏幕内容供AI分析",
+                description = "用于捕获屏幕内容供 AI 分析",
                 granted = screenCaptureGranted,
                 onGrant = {
                     val screenCapture = ScreenCapture.getInstance(context)
@@ -236,48 +228,41 @@ fun PermissionScreen(
                 }
             )
 
-            // App List Permission (QUERY_ALL_PACKAGES)
+            // App List Permission
             PermissionCard(
                 icon = Icons.AutoMirrored.Filled.List,
                 title = "应用列表权限",
                 description = "用于获取和启动其他应用",
                 granted = appListGranted,
                 onGrant = {
-                    // This permission is granted at install time
-                    // If not granted, we can't do anything
                     Log.d(TAG, "App list permission status: $appListGranted")
                 }
             )
 
-            // API Key Configuration
+            // API Key Configuration - Navigate to API Config Management
             PermissionCard(
                 icon = Icons.Default.Key,
                 title = "API 配置",
-                description = "配置AI服务的API密钥和模型",
+                description = "配置 AI 服务的 API 密钥和模型",
                 granted = apiKeyConfigured,
                 onGrant = {
-                    apiKeyInput = apiClient.apiKey
-                    baseUrlInput = apiClient.baseUrl
-                    modelIdInput = apiClient.modelId
-                    selectedProviderId = apiClient.providerId.ifEmpty { "zhipu" }
-                    showApiKeyDialog = true
+                    // Navigate to API config management screen
+                    onNavigateToApiConfig()
                 }
             )
 
-            // Shizuku (Optional - for enhanced app operations)
+            // Shizuku (Optional)
             PermissionCard(
                 icon = Icons.Default.Terminal,
                 title = "Shizuku (可选)",
-                description = "用于更可靠的应用列表和启动功能。需要先安装 Shizuku APP",
+                description = "用于更可靠的应用列表和启动功能",
                 granted = shizukuGranted,
                 onGrant = {
-                    // Open Shizuku app if installed, otherwise Play Store
                     try {
                         val intent = context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
                         if (intent != null) {
                             context.startActivity(intent)
                         } else {
-                            // Open Play Store to Shizuku
                             val playStoreIntent = Intent(Intent.ACTION_VIEW).apply {
                                 data = Uri.parse("market://details?id=moe.shizuku.privileged.api")
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -293,7 +278,13 @@ fun PermissionScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Progress indicator
-            val grantedCount = listOf(accessibilityGranted, screenCaptureGranted, overlayGranted, appListGranted, apiKeyConfigured).count { it }
+            val grantedCount = listOf(
+                accessibilityGranted, 
+                screenCaptureGranted, 
+                overlayGranted, 
+                appListGranted, 
+                apiKeyConfigured
+            ).count { it }
             val totalCount = 5
 
             Card(
@@ -335,193 +326,39 @@ fun PermissionScreen(
             }
         }
     }
-
-    // API Key Dialog - Cherry Studio Style
-    if (showApiKeyDialog) {
-        val providers = ModelProvider.getAllProviders()
-        val selectedProvider = providers.find { it.id == selectedProviderId } ?: providers.first()
-
-        AlertDialog(
-            onDismissRequest = { showApiKeyDialog = false },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Title
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "API 配置",
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        IconButton(onClick = { showApiKeyDialog = false }) {
-                            Icon(Icons.Default.Close, contentDescription = "关闭")
-                        }
-                    }
-
-                    // Provider Selection
-                    Text(
-                        text = "选择服务商",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    // Provider Cards Grid
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        providers.chunked(2).forEach { rowProviders ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                rowProviders.forEach { provider ->
-                                    val isSelected = provider.id == selectedProviderId
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(
-                                                if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                                                else MaterialTheme.colorScheme.surfaceVariant
-                                            )
-                                            .border(
-                                                width = if (isSelected) 2.dp else 0.dp,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary
-                                                else Color.Transparent,
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .clickable { selectedProviderId = provider.id }
-                                            .padding(12.dp)
-                                    ) {
-                                        Text(
-                                            text = provider.displayName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                                            else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                                // Fill empty slots
-                                repeat(2 - rowProviders.size) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                }
-                            }
-                        }
-                    }
-
-                    // API Key Input
-                    OutlinedTextField(
-                        value = apiKeyInput,
-                        onValueChange = { apiKeyInput = it },
-                        label = { Text("API Key") },
-                        singleLine = true,
-                        visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { showApiKey = !showApiKey }) {
-                                Icon(
-                                    imageVector = if (showApiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (showApiKey) "隐藏" else "显示"
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // Base URL Input
-                    OutlinedTextField(
-                        value = baseUrlInput,
-                        onValueChange = { baseUrlInput = it },
-                        label = { Text("Base URL (可选)") },
-                        singleLine = true,
-                        placeholder = { Text(selectedProvider.defaultBaseUrl) },
-                        supportingText = { Text("留空使用默认值") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // Model ID Input
-                    OutlinedTextField(
-                        value = modelIdInput,
-                        onValueChange = { modelIdInput = it },
-                        label = { Text("模型 (可选)") },
-                        singleLine = true,
-                        placeholder = { Text(selectedProvider.defaultModel) },
-                        supportingText = { Text("留空使用默认模型") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // Action Buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showApiKeyDialog = false },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("取消")
-                        }
-                        Button(
-                            onClick = {
-                                if (apiKeyInput.isNotBlank()) {
-                                    apiClient.saveConfig(
-                                        provider = selectedProvider,
-                                        key = apiKeyInput,
-                                        url = baseUrlInput.ifBlank { selectedProvider.defaultBaseUrl },
-                                        model = modelIdInput.ifBlank { selectedProvider.defaultModel }
-                                    )
-                                    apiKeyConfigured = true
-                                    showApiKeyDialog = false
-                                }
-                            },
-                            enabled = apiKeyInput.isNotBlank(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("保存")
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
 fun HeaderSection() {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Default.Settings,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.primary
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
         )
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "欢迎使用 AI 自动化助手",
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Default.SettingsSuggest,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.primary
             )
-
+            
             Text(
-                text = "此应用需要以下权限来自动化执行任务。请授予相关权限以继续。",
+                text = "欢迎使用 AI 助手",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            
+            Text(
+                text = "请完成以下设置以启用 AI 自动化功能",
                 style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -539,14 +376,16 @@ fun PermissionCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (granted) {
-                MaterialTheme.colorScheme.primaryContainer
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
             } else {
-                MaterialTheme.colorScheme.surface
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             }
         )
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -587,7 +426,7 @@ fun PermissionCard(
                 }
                 else -> {
                     Button(onClick = onGrant) {
-                        Text("Grant")
+                        Text("授权")
                     }
                 }
             }

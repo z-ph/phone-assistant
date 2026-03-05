@@ -1,7 +1,5 @@
 package com.example.myapplication.data.repository
 
-import android.content.Context
-import androidx.room.Room
 import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.dao.MessageDao
 import com.example.myapplication.data.local.dao.SessionDao
@@ -18,15 +16,7 @@ import java.util.UUID
 /**
  * Repository for chat data operations
  */
-class ChatRepository private constructor(context: Context) {
-
-    private val database: AppDatabase = Room.databaseBuilder(
-        context.applicationContext,
-        AppDatabase::class.java,
-        "chat_database"
-    )
-        .addMigrations(AppDatabase.MIGRATION_1_2)
-        .build()
+class ChatRepository(database: AppDatabase) {
 
     private val sessionDao: SessionDao = database.sessionDao()
     private val messageDao: MessageDao = database.messageDao()
@@ -36,9 +26,9 @@ class ChatRepository private constructor(context: Context) {
         @Volatile
         private var instance: ChatRepository? = null
 
-        fun getInstance(context: Context): ChatRepository {
+        fun getInstance(database: AppDatabase): ChatRepository {
             return instance ?: synchronized(this) {
-                instance ?: ChatRepository(context).also { instance = it }
+                instance ?: ChatRepository(database).also { instance = it }
             }
         }
     }

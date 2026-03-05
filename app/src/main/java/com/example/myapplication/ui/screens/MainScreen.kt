@@ -1,17 +1,11 @@
 package com.example.myapplication.ui.screens
 
 import android.content.Intent
-import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,25 +13,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.myapplication.MyApplication
+import com.example.myapplication.agent.LangChainAgentEngine
 import com.example.myapplication.accessibility.AutoService
-import com.example.myapplication.api.ZhipuApiClient
-import com.example.myapplication.config.ModelProvider
-import com.example.myapplication.engine.TaskEngine
-import com.example.myapplication.engine.TaskStatus
 import com.example.myapplication.screen.ScreenCapture
 import com.example.myapplication.utils.Logger
-import kotlinx.coroutines.delay
 
 private const val TAG = "MainScreen"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    taskEngine: TaskEngine,
-    apiClient: ZhipuApiClient,
+    langChainAgentEngine: LangChainAgentEngine = MyApplication.getLangChainAgentEngine(),
     onNavigateToApiConfig: () -> Unit,
     onNavigateBack: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -45,31 +33,23 @@ fun MainScreen(
     val context = LocalContext.current
     val logger = Logger(TAG)
 
-    // State
-    val isRunning by taskEngine.isRunning.collectAsState()
-    val taskStatus by taskEngine.taskStatus.collectAsState()
-    val readinessStatus by remember { derivedStateOf { taskEngine.getReadinessStatus() } }
-    val lastActions by taskEngine.lastActions.collectAsState()
-    val error by taskEngine.error.collectAsState()
+    val agentState by langChainAgentEngine.state.collectAsState()
+    val isReady = remember(agentState.state) {
+        agentState.state == LangChainAgentEngine.AgentStateType.READY
+    }
 
-    var promptInput by remember { mutableStateOf("") }
-
-
-    // Screen capture permission launcher
     val screenCaptureLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            result.data?.let {
-                logger.d("Screen capture permission granted")
-            }
+            logger.d("Screen capture permission granted")
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("API 设置") },
+                title = { Text("Agent 设置") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
@@ -90,19 +70,12 @@ fun MainScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Status Card
             item {
-                StatusCard(
-                    readinessStatus = readinessStatus,
-                    taskStatus = taskStatus,
-                    isRunning = isRunning
-                )
+                StatusCard(agentState = agentState, isReady = isReady)
             }
 
-            // Permissions Card
             item {
                 PermissionsCard(
-                    readinessStatus = readinessStatus,
                     onOpenAccessibility = {
                         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                         context.startActivity(intent)
@@ -114,128 +87,24 @@ fun MainScreen(
                 )
             }
 
-            // API Configuration Card
             item {
-                ApiConfigCard(
-                    apiClient = apiClient,
-                    onShowFullConfig = onNavigateToApiConfig
+                ApiConfigSummaryCard(onShowFullConfig = onNavigateToApiConfig)
+            }
+
+            item {
+                AgentControlCard(
+                    langChainAgentEngine = langChainAgentEngine,
+                    isReady = isReady
                 )
             }
 
-            // Task Control Card
-            item {
-                TaskControlCard(
-                    promptInput = promptInput,
-                    onPromptChange = { promptInput = it },
-                    isRunning = isRunning,
-                    readinessStatus = readinessStatus,
-                    onStartTask = {
-                        if (promptInput.isNotBlank()) {
-                            taskEngine.executeTask(promptInput)
-                        }
-                    },
-                    onCancelTask = {
-                        taskEngine.cancelTask()
-                    }
-                )
-            }
-
-            // Actions Card
-            if (lastActions.isNotEmpty()) {
-                item {
-                    ActionsCard(actions = lastActions)
-                }
-            }
-
-            // Error Card
-            error?.let { errorMessage ->
+            agentState.error?.let { errorMessage ->
                 item {
                     ErrorCard(
                         message = errorMessage,
-                        onDismiss = { taskEngine.clearError() }
+                        onDismiss = { langChainAgentEngine.cancel() }
                     )
                 }
-            }
-        }
-    }
-
-}
-
-@Composable
-fun ApiConfigCard(
-    apiClient: ZhipuApiClient,
-    onShowFullConfig: () -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "API 配置",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                TextButton(onClick = onShowFullConfig) {
-                    Text("详细设置")
-                    Spacer(Modifier.width(4.dp))
-                    Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
-                }
-            }
-
-            HorizontalDivider()
-
-            // Current provider info
-            val provider = apiClient.currentProvider
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(Icons.Default.Cloud, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Column {
-                    Text(
-                        text = "Provider: ${provider.name}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = "Model: ${apiClient.modelId}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // API Key status
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = if (apiClient.apiKey.isNotEmpty()) Icons.Default.Key else Icons.Default.KeyOff,
-                    contentDescription = null,
-                    tint = if (apiClient.apiKey.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                )
-                Text(
-                    text = if (apiClient.apiKey.isNotEmpty()) "API Key: ${apiClient.apiKey.take(8)}..." else "API Key: 未设置",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
-            // Base URL
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(Icons.Default.Link, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    text = apiClient.baseUrl,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
@@ -243,17 +112,17 @@ fun ApiConfigCard(
 
 @Composable
 fun StatusCard(
-    readinessStatus: com.example.myapplication.engine.ReadinessStatus,
-    taskStatus: TaskStatus,
-    isRunning: Boolean
+    agentState: LangChainAgentEngine.AgentState,
+    isReady: Boolean
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = when {
-                isRunning -> MaterialTheme.colorScheme.primaryContainer
-                readinessStatus.isReady -> MaterialTheme.colorScheme.secondaryContainer
-                else -> MaterialTheme.colorScheme.errorContainer
+                agentState.state == LangChainAgentEngine.AgentStateType.RUNNING -> MaterialTheme.colorScheme.primaryContainer
+                isReady -> MaterialTheme.colorScheme.secondaryContainer
+                agentState.state == LangChainAgentEngine.AgentStateType.ERROR -> MaterialTheme.colorScheme.errorContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant
             }
         )
     ) {
@@ -262,7 +131,7 @@ fun StatusCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "状态",
+                text = "Agent 状态",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -272,32 +141,48 @@ fun StatusCard(
             ) {
                 StatusIndicator(
                     label = "无障碍",
-                    isReady = readinessStatus.accessibilityServiceEnabled
+                    isReady = AutoService.isEnabled()
                 )
                 StatusIndicator(
                     label = "屏幕捕获",
-                    isReady = readinessStatus.screenCaptureActive
+                    isReady = ScreenCapture.isProjectionActive()
                 )
                 StatusIndicator(
-                    label = "API Key",
-                    isReady = readinessStatus.apiKeyConfigured
+                    label = "Agent",
+                    isReady = isReady
                 )
             }
 
-            if (isRunning) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (agentState.state == LangChainAgentEngine.AgentStateType.RUNNING) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp
                     )
-                    Text(
-                        text = "任务状态: ${taskStatus.name}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
                 }
+                Text(
+                    text = "当前状态：${
+                        when (agentState.state) {
+                            LangChainAgentEngine.AgentStateType.READY -> "已就绪"
+                            LangChainAgentEngine.AgentStateType.RUNNING -> "运行中"
+                            LangChainAgentEngine.AgentStateType.ERROR -> "错误"
+                            LangChainAgentEngine.AgentStateType.COMPLETED -> "已完成"
+                            else -> agentState.state.name
+                        }
+                    }",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            if (agentState.result != null) {
+                Text(
+                    text = "结果：${agentState.result}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -326,7 +211,6 @@ fun StatusIndicator(
 
 @Composable
 fun PermissionsCard(
-    readinessStatus: com.example.myapplication.engine.ReadinessStatus,
     onOpenAccessibility: () -> Unit,
     onRequestScreenCapture: () -> Unit
 ) {
@@ -340,16 +224,16 @@ fun PermissionsCard(
                 style = MaterialTheme.typography.titleMedium
             )
 
-            if (!readinessStatus.accessibilityServiceEnabled) {
+            if (!AutoService.isEnabled()) {
                 PermissionItem(
                     title = "无障碍服务",
-                    description = "用于自动化UI交互",
+                    description = "用于自动化 UI 交互",
                     buttonText = "开启",
                     onButtonClick = onOpenAccessibility
                 )
             }
 
-            if (!readinessStatus.screenCaptureActive) {
+            if (!ScreenCapture.isProjectionActive()) {
                 PermissionItem(
                     title = "屏幕捕获",
                     description = "用于捕获屏幕内容",
@@ -358,7 +242,7 @@ fun PermissionsCard(
                 )
             }
 
-            if (readinessStatus.accessibilityServiceEnabled && readinessStatus.screenCaptureActive) {
+            if (AutoService.isEnabled() && ScreenCapture.isProjectionActive()) {
                 Text(
                     text = "所有权限已授予!",
                     style = MaterialTheme.typography.bodyMedium,
@@ -396,33 +280,55 @@ fun PermissionItem(
 }
 
 @Composable
-fun TaskControlCard(
-    promptInput: String,
-    onPromptChange: (String) -> Unit,
-    isRunning: Boolean,
-    readinessStatus: com.example.myapplication.engine.ReadinessStatus,
-    onStartTask: () -> Unit,
-    onCancelTask: () -> Unit
+fun ApiConfigSummaryCard(
+    onShowFullConfig: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "任务控制",
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            OutlinedTextField(
-                value = promptInput,
-                onValueChange = onPromptChange,
-                label = { Text("输入任务指令") },
-                placeholder = { Text("例如: '打开设置并进入WiFi页面'") },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isRunning,
-                minLines = 3,
-                maxLines = 5
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "API 配置",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                TextButton(onClick = onShowFullConfig) {
+                    Text("管理")
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+            }
+
+            HorizontalDivider()
+
+            Text(
+                text = "在 API 配置管理中添加和切换不同的 AI 提供商",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+fun AgentControlCard(
+    langChainAgentEngine: LangChainAgentEngine,
+    isReady: Boolean
+) {
+    val logger = Logger("AgentControlCard")
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Agent 控制",
+                style = MaterialTheme.typography.titleMedium
             )
 
             Row(
@@ -430,92 +336,37 @@ fun TaskControlCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = onStartTask,
-                    enabled = promptInput.isNotBlank() && !isRunning && readinessStatus.isReady,
+                    onClick = {
+                        langChainAgentEngine.execute("分析一下当前屏幕，告诉我可以做什么") { result ->
+                            logger.d("测试执行结果：${result.message}")
+                        }
+                    },
+                    enabled = isReady,
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("开始任务")
+                    Text("测试 Agent")
                 }
 
                 OutlinedButton(
-                    onClick = onCancelTask,
-                    enabled = isRunning
+                    onClick = {
+                        langChainAgentEngine.cancel()
+                    },
+                    enabled = langChainAgentEngine.state.value.state == LangChainAgentEngine.AgentStateType.RUNNING
                 ) {
-                    Icon(Icons.Default.Close, contentDescription = null)
+                    Icon(Icons.Default.Stop, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("取消")
+                    Text("停止")
                 }
             }
-        }
-    }
-}
 
-@Composable
-fun ActionsCard(actions: List<com.example.myapplication.api.model.UiAction>) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
             Text(
-                text = "动作列表 (${actions.size})",
-                style = MaterialTheme.typography.titleMedium
+                text = "提示：在聊天界面中使用 Agent 功能",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
-            actions.forEach { action ->
-                ActionItem(action = action)
-            }
         }
-    }
-}
-
-@Composable
-fun ActionItem(action: com.example.myapplication.api.model.UiAction) {
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
-    val description: String
-
-    when (action) {
-        is com.example.myapplication.api.model.UiAction.Click -> {
-            icon = Icons.Default.AddLocation
-            description = "点击 (${action.x.toInt()}, ${action.y.toInt()})"
-        }
-        is com.example.myapplication.api.model.UiAction.Swipe -> {
-            icon = Icons.Default.Swipe
-            description = "滑动 ${action.direction} (${action.distance}px)"
-        }
-        is com.example.myapplication.api.model.UiAction.InputText -> {
-            icon = Icons.Default.Edit
-            description = "输入: ${if (action.text.length > 30) action.text.take(30) + "..." else action.text}"
-        }
-        is com.example.myapplication.api.model.UiAction.ClickNode -> {
-            icon = Icons.Default.AddLocation
-            description = "点击节点: ${action.nodeId}"
-        }
-        is com.example.myapplication.api.model.UiAction.Navigate -> {
-            icon = Icons.Default.ArrowBack
-            description = "导航: ${action.action}"
-        }
-        is com.example.myapplication.api.model.UiAction.Wait -> {
-            icon = Icons.Default.Schedule
-            description = "等待: ${action.durationMs}ms"
-        }
-    }
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodyMedium
-        )
     }
 }
 

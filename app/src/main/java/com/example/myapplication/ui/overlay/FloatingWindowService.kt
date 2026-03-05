@@ -16,8 +16,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.example.myapplication.R
-import com.example.myapplication.agent.AgentAction
-import com.example.myapplication.agent.AgentState
 import com.example.myapplication.agent.LangChainAgentEngine
 import com.example.myapplication.utils.Logger
 import kotlinx.coroutines.*
@@ -83,7 +81,7 @@ class FloatingWindowService : Service() {
     private var minimizedParams: WindowManager.LayoutParams? = null
 
     // State tracking
-    private var stateFlow: StateFlow<AgentState>? = null
+    private var stateFlow: StateFlow<LangChainAgentEngine.AgentState>? = null
     private var stateJob: Job? = null
 
     // Log buffer
@@ -591,12 +589,6 @@ class FloatingWindowService : Service() {
         }
     }
 
-    fun setAgentState(state: AgentState) {
-        scope.launch(Dispatchers.Main) {
-            updateUI(state)
-        }
-    }
-
     fun setLangChainAgentState(state: LangChainAgentEngine.AgentState) {
         scope.launch(Dispatchers.Main) {
             updateLangChainUI(state)
@@ -642,73 +634,6 @@ class FloatingWindowService : Service() {
             LangChainAgentEngine.AgentStateType.ERROR -> state.error ?: "错误"
             LangChainAgentEngine.AgentStateType.CANCELLED -> "已取消"
             else -> "等待中..."
-        }
-    }
-
-    @SuppressLint("SetTextI18n")
-    private fun updateUI(state: AgentState) {
-        // Update stop button visibility
-        stopButton?.visibility = if (state.isRunning) View.VISIBLE else View.GONE
-
-        // Update status dot color based on state
-        val headerLayout = expandedLayout?.getChildAt(0) as? LinearLayout
-        val statusIndicator = headerLayout?.getChildAt(0)
-        statusIndicator?.setBackgroundResource(
-            when {
-                state.isRunning -> R.drawable.status_dot_running
-                state.isFinished -> R.drawable.status_dot_stopped
-                state.error != null -> R.drawable.status_dot_stopped
-                else -> R.drawable.status_dot_idle
-            }
-        )
-
-        // Update status text
-        statusText?.text = when {
-            state.isRunning -> "AI 助手运行中"
-            state.isFinished -> "任务完成"
-            state.error != null -> "出错：${state.error.take(20)}"
-            else -> "AI 助手待命"
-        }
-
-        // Update step
-        stepText?.text = "步骤：${state.currentStep}/${state.maxSteps}"
-
-        // Update action
-        val lastStep = state.steps.lastOrNull()
-        actionText?.text = when {
-            state.isRunning && lastStep != null -> {
-                val action = lastStep.action
-                when (action) {
-                    is AgentAction.CaptureScreen -> "正在截图..."
-                    is AgentAction.Click -> "点击 (${action.x.toInt()}, ${action.y.toInt()})"
-                    is AgentAction.LongClick -> "长按 (${action.x.toInt()}, ${action.y.toInt()})"
-                    is AgentAction.DoubleClick -> "双击 (${action.x.toInt()}, ${action.y.toInt()})"
-                    is AgentAction.Swipe -> "滑动 ${action.direction}"
-                    is AgentAction.Drag -> "拖拽"
-                    is AgentAction.Type -> "输入：${action.text.take(15)}"
-                    is AgentAction.OpenApp -> "打开应用"
-                    is AgentAction.ListApps -> "获取应用列表"
-                    is AgentAction.Reply -> "回复：${action.message.take(20)}"
-                    is AgentAction.Finish -> "完成：${action.summary.take(20)}"
-                    else -> action.toDescription()
-                }
-            }
-            state.isFinished -> "已完成"
-            state.error != null -> "错误：${state.error}"
-            else -> "等待任务..."
-        }
-
-        // Update thinking
-        if (lastStep?.thinking != null) {
-            thinkingText?.text = "💡 ${lastStep.thinking}"
-            thinkingText?.visibility = View.VISIBLE
-        } else {
-            thinkingText?.visibility = View.GONE
-        }
-
-        // Update log
-        if (lastStep != null && state.isRunning) {
-            addLog(lastStep.action.toDescription() + if (lastStep.observation != null) " → ${lastStep.observation.take(30)}" else "")
         }
     }
 

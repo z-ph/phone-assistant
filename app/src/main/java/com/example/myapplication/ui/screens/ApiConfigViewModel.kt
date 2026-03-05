@@ -5,17 +5,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.MyApplication
 import com.example.myapplication.api.ModelFetcher
-import com.example.myapplication.api.ModelFetchResult
 import com.example.myapplication.api.ModelInfo
-import com.example.myapplication.api.ZhipuApiClient
 import com.example.myapplication.config.ModelProvider
 import com.example.myapplication.data.local.AppDatabase
-import com.example.myapplication.data.local.dao.ApiConfigDao
 import com.example.myapplication.data.local.entities.ApiConfigEntity
-import com.example.myapplication.utils.PreferencesManager
+import com.example.myapplication.data.repository.ApiConfigRepository
+import com.example.myapplication.utils.Logger
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 /**
  * ViewModel for API configuration management
@@ -23,20 +20,21 @@ import java.util.UUID
 class ApiConfigViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as MyApplication
-    private val apiConfigDao: ApiConfigDao = AppDatabase.getDatabase(application).apiConfigDao()
+    private val database = AppDatabase.getDatabase(application)
+    private val repository = ApiConfigRepository(database.apiConfigDao())
     private val modelFetcher = ModelFetcher()
-    private val prefs = PreferencesManager.getInstance(application)
+    private val logger = Logger("ApiConfigViewModel")
 
     // UI State
     private val _uiState = MutableStateFlow(ApiConfigUiState())
     val uiState: StateFlow<ApiConfigUiState> = _uiState.asStateFlow()
 
     // All configurations
-    val configs: StateFlow<List<ApiConfigEntity>> = apiConfigDao.getAllConfigs()
+    val configs: StateFlow<List<ApiConfigEntity>> = repository.allConfigs
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // Active configuration
-    val activeConfig: StateFlow<ApiConfigEntity?> = apiConfigDao.getActiveConfigFlow()
+    val activeConfig: StateFlow<ApiConfigEntity?> = repository.activeConfigFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
     // Available models for current provider
@@ -46,35 +44,6 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
     // Test result
     private val _testResult = MutableStateFlow<TestConnectionResult?>(null)
     val testResult: StateFlow<TestConnectionResult?> = _testResult.asStateFlow()
-
-    init {
-        // Check if migration from old prefs is needed
-        viewModelScope.launch {
-            val configCount = apiConfigDao.getConfigCount()
-            if (configCount == 0 && prefs.isApiConfigured()) {
-                migrateFromOldPrefs()
-            }
-        }
-    }
-
-    /**
-     * Migrate configuration from old SharedPreferences to new database
-     */
-    private suspend fun migrateFromOldPrefs() {
-        val provider = prefs.getCurrentProvider()
-        val config = ApiConfigEntity(
-            id = UUID.randomUUID().toString(),
-            name = provider.name,
-            providerId = provider.id,
-            apiKey = prefs.apiKey,
-            baseUrl = prefs.baseUrl,
-            modelId = prefs.modelId,
-            isActive = true,
-            createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis()
-        )
-        apiConfigDao.insertConfig(config)
-    }
 
     /**
      * Create a new configuration
@@ -87,22 +56,17 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
         modelId: String
     ) {
         viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            val isFirst = apiConfigDao.getConfigCount() == 0
-
-            val config = ApiConfigEntity(
-                id = UUID.randomUUID().toString(),
-                name = name.ifEmpty { provider.displayName },
-                providerId = provider.id,
-                apiKey = apiKey,
-                baseUrl = baseUrl,
-                modelId = modelId.ifEmpty { provider.defaultModel },
-                isActive = isFirst,
-                createdAt = now,
-                updatedAt = now
-            )
-            apiConfigDao.insertConfig(config)
-            _uiState.update { it.copy(showEditDialog = false, editingConfig = null) }
+            val result = repository.createConfig(name, provider, apiKey, baseUrl, modelId)
+            
+            result.onSuccess { config ->
+                _uiState.update { it.copy(showEditDialog = false, editingConfig = null) }
+                
+                if (config.isActive) {
+                    app.langChainAgentEngine.reconfigure()
+                }
+            }.onFailure { exception ->
+                logger.e("创建配置失败：${exception.message}")
+            }
         }
     }
 
@@ -118,17 +82,20 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
         modelId: String
     ) {
         viewModelScope.launch {
-            val existing = apiConfigDao.getConfigById(configId) ?: return@launch
-            val updated = existing.copy(
-                name = name,
-                providerId = provider.id,
-                apiKey = apiKey,
-                baseUrl = baseUrl,
-                modelId = modelId.ifEmpty { provider.defaultModel },
-                updatedAt = System.currentTimeMillis()
-            )
-            apiConfigDao.updateConfig(updated)
-            _uiState.update { it.copy(showEditDialog = false, editingConfig = null) }
+            val existing = repository.getConfigById(configId) ?: return@launch
+            val wasActive = existing.isActive
+            
+            val result = repository.updateConfig(configId, name, provider, apiKey, baseUrl, modelId)
+            
+            result.onSuccess {
+                _uiState.update { it.copy(showEditDialog = false, editingConfig = null) }
+                
+                if (wasActive) {
+                    app.langChainAgentEngine.reconfigure()
+                }
+            }.onFailure { exception ->
+                logger.e("更新配置失败：${exception.message}")
+            }
         }
     }
 
@@ -137,19 +104,13 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun deleteConfig(configId: String) {
         viewModelScope.launch {
-            val config = apiConfigDao.getConfigById(configId) ?: return@launch
-            val wasActive = config.isActive
-
-            apiConfigDao.deleteConfigById(configId)
-
-            // If deleted config was active, activate another one
-            if (wasActive) {
-                val remaining = apiConfigDao.getAllConfigs().first()
-                if (remaining.isNotEmpty()) {
-                    setActiveConfig(remaining.first().id)
-                }
+            val result = repository.deleteConfig(configId)
+            
+            result.onSuccess {
+                _uiState.update { it.copy(showDeleteConfirm = false, configToDelete = null) }
+            }.onFailure { exception ->
+                logger.e("删除配置失败：${exception.message}")
             }
-            _uiState.update { it.copy(showDeleteConfirm = false, configToDelete = null) }
         }
     }
 
@@ -158,11 +119,18 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun setActiveConfig(configId: String) {
         viewModelScope.launch {
-            apiConfigDao.setActiveConfig(configId)
-
-            // Load config and update ZhipuApiClient (which updates PreferencesManager)
-            val config = apiConfigDao.getConfigById(configId) ?: return@launch
-            app.zhipuApiClient.loadConfig(config)
+            val result = repository.setActiveConfig(configId)
+            
+            result.onSuccess {
+                val initResult = app.langChainAgentEngine.reconfigure()
+                if (initResult.isSuccess) {
+                    logger.d("LangChainAgentEngine reinitialized successfully")
+                } else {
+                    logger.w("LangChainAgentEngine reinitialize failed: ${initResult.exceptionOrNull()?.message}")
+                }
+            }.onFailure { exception ->
+                logger.e("设置活跃配置失败：${exception.message}")
+            }
         }
     }
 
@@ -219,6 +187,39 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun clearTestResult() {
         _testResult.value = null
+    }
+
+    /**
+     * Test API connection
+     */
+    private suspend fun testApiConnection(
+        provider: ModelProvider,
+        apiKey: String,
+        baseUrl: String,
+        modelId: String
+    ): TestResult {
+        return try {
+            val result = modelFetcher.fetchModels(provider, apiKey, baseUrl)
+            if (result.isSuccess) {
+                TestResult(
+                    isSuccess = true,
+                    message = "连接成功！获取到 ${result.models.size} 个模型",
+                    rawResponse = "Models: ${result.models.joinToString { it.name }}"
+                )
+            } else {
+                TestResult(
+                    isSuccess = false,
+                    message = result.error ?: "连接失败",
+                    rawResponse = null
+                )
+            }
+        } catch (e: Exception) {
+            TestResult(
+                isSuccess = false,
+                message = "测试失败：${e.message}",
+                rawResponse = null
+            )
+        }
     }
 
     /**
@@ -298,4 +299,13 @@ data class TestConnectionResult(
     val isSuccess: Boolean,
     val message: String,
     val details: String? = null
+)
+
+/**
+ * Internal test result data class
+ */
+private data class TestResult(
+    val isSuccess: Boolean,
+    val message: String,
+    val rawResponse: String? = null
 )

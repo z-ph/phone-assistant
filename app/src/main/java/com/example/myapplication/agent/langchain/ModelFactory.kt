@@ -12,6 +12,16 @@ import dev.langchain4j.model.openai.OpenAiStreamingChatModel
 import java.time.Duration
 
 /**
+ * LangChain4j 模型工厂配置
+ */
+data class ProviderConfig(
+    val providerId: String,
+    val apiKey: String,
+    val baseUrl: String,
+    val modelId: String
+)
+
+/**
  * LangChain4j 模型工厂
  * 支持多种 LLM 提供商的 Chat 和 Streaming 模型创建
  * 
@@ -30,7 +40,7 @@ object ModelFactory {
     /**
      * 创建同步聊天模型
      */
-    fun createChatModel(config: ApiConfigManager.ProviderConfig): ChatLanguageModel {
+    fun createChatModel(config: ProviderConfig): ChatLanguageModel {
         logger.d("创建 Chat 模型: provider=${config.providerId}, model=${config.modelId}")
 
         return when (config.providerId) {
@@ -120,7 +130,7 @@ object ModelFactory {
     /**
      * 创建流式聊天模型（用于实时响应）
      */
-    fun createStreamingModel(config: ApiConfigManager.ProviderConfig): StreamingChatLanguageModel? {
+    fun createStreamingModel(config: ProviderConfig): StreamingChatLanguageModel? {
         logger.d("创建 Streaming 模型: provider=${config.providerId}, model=${config.modelId}")
 
         return when (config.providerId) {

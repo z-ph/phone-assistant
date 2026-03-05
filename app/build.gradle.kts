@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    kotlin("plugin.serialization") version "2.1.10"
 }
 
 android {
@@ -55,10 +56,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
 
-    // Lifecycle ViewModel Compose
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-
-    // Material Icons Extended (version managed by Compose BOM)
+    // Material Icons Extended
     implementation(libs.androidx.compose.material.icons.extended)
 
     // Network requests
@@ -82,7 +80,7 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // Shizuku - shell permission access without root
+    // Shizuku
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
 
@@ -93,8 +91,20 @@ dependencies {
     implementation(libs.langchain4j.anthropic)
     implementation(libs.langchain4j.ollama)
 
-    // Core library desugaring
+    // DataStore - Preferences replacement
+    implementation(libs.androidx.datastore.preferences)
+
+    // Kotlinx Serialization
+    implementation(libs.kotlinx.serialization.json)
+
+    // Lifecycle ViewModel SavedState
+    implementation(libs.androidx.lifecycle.viewmodel.savedstate)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     coreLibraryDesugaring(libs.desugar.jdk)
+
+    // Chucker - Network inspector (debug only, Maven Central)
+    debugImplementation("com.github.chuckerteam.chucker:library:4.2.0")
+    releaseImplementation("com.github.chuckerteam.chucker:library-no-op:4.2.0")
 
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)

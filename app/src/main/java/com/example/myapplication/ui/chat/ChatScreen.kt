@@ -17,8 +17,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.MyApplication
+import com.example.myapplication.agent.LangChainAgentEngine
 import com.example.myapplication.data.model.ChatMessage
-import com.example.myapplication.engine.TaskEngine
 import com.example.myapplication.screen.ScreenCapture
 import com.example.myapplication.ui.chat.components.*
 import kotlinx.coroutines.launch
@@ -28,24 +28,26 @@ import kotlinx.coroutines.launch
 fun ChatScreen(
     viewModel: ChatViewModel = viewModel(),
     onOpenSettings: () -> Unit = {},
-    onOpenPromptEditor: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val taskEngine = MyApplication.getTaskEngine()
+    val langChainAgentEngine = MyApplication.getLangChainAgentEngine()
 
     val sessions by viewModel.sessions.collectAsState()
     val currentSession by viewModel.currentSession.collectAsState()
     val messages by viewModel.currentMessages.collectAsState()
     val isTaskRunning by viewModel.isTaskRunning.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    val agentState by langChainAgentEngine.state.collectAsState()
 
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    val readinessStatus = remember { derivedStateOf { taskEngine.getReadinessStatus() } }
+    val isReady = remember(agentState.state) {
+        agentState.state == LangChainAgentEngine.AgentStateType.READY
+    }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -98,15 +100,11 @@ fun ChatScreen(
                         }
                     },
                     actions = {
-                        if (isTaskRunning) {
+                        if (agentState.state == LangChainAgentEngine.AgentStateType.RUNNING) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp
                             )
-                        }
-
-                        IconButton(onClick = onOpenPromptEditor) {
-                            Icon(Icons.Default.EditNote, contentDescription = "Edit Prompt")
                         }
 
                         IconButton(onClick = { viewModel.clearCurrentSession() }) {
