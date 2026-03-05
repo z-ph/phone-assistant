@@ -3,6 +3,7 @@ package com.example.myapplication
 import android.app.Application
 import android.content.Context
 import com.example.myapplication.agent.LangChainAgentEngine
+import com.example.myapplication.di.ServiceLocator
 import com.example.myapplication.shell.ShellExecutor
 import com.example.myapplication.utils.CrashHandler
 import com.example.myapplication.utils.Logger
@@ -43,6 +44,9 @@ class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // Initialize ServiceLocator first
+        ServiceLocator.init(applicationContext)
 
         logger.i("MyApplication created")
         initializeApp()
